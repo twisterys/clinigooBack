@@ -1,0 +1,159 @@
+models:
+
+  Address:
+    user_id: id foreign:users
+    label: string nullable
+    address_line: string
+    city: string
+    postal_code: string nullable
+    latitude: decimal:10,7 nullable
+    longitude: decimal:10,7 nullable
+    instructions: text nullable
+    is_default: boolean default:false
+    relationships:
+      belongsTo: User
+      hasMany: CareRequest
+
+  Beneficiary:
+    user_id: id foreign:users
+    first_name: string
+    last_name: string
+    relationship: string nullable
+    gender: string nullable
+    date_of_birth: date nullable
+    phone: string nullable
+    medical_notes: text nullable
+    is_default: boolean default:false
+    relationships:
+      belongsTo: User
+      hasMany: CareRequest
+
+  ServiceCategory:
+    name: json
+    slug: string unique
+    icon: string nullable
+    sort_order: integer default:0
+    is_active: boolean default:true
+    relationships:
+      hasMany: Service
+
+  Service:
+    service_category_id: id foreign:service_categories
+    name: json
+    slug: string unique
+    short_description: json nullable
+    description: json nullable
+    icon: string nullable
+    image: string nullable
+    base_price: decimal:10,2 nullable
+    duration_minutes: integer nullable
+    is_active: boolean default:true
+    sort_order: integer default:0
+    relationships:
+      belongsTo: ServiceCategory
+      hasMany: CareRequest
+
+  CareRequest:
+    uuid: uuid unique
+
+    user_id: id foreign:users
+    beneficiary_id: id foreign:beneficiaries
+    service_id: id foreign:services
+    address_id: id foreign:addresses nullable
+
+    scheduled_at: datetime
+    notes: text nullable
+
+    status: string default:pending
+
+    address_label: string nullable
+    address_line: string
+    city: string
+    latitude: decimal:10,7 nullable
+    longitude: decimal:10,7 nullable
+    address_instructions: text nullable
+
+    cancelled_at: datetime nullable
+
+    relationships:
+      belongsTo: User, Beneficiary, Service, Address
+
+
+controllers:
+
+  Api/Client/Address:
+    index:
+      query: all
+      render: address.index with:addresses
+
+    store:
+      validate: label, address_line, city, postal_code, latitude, longitude, instructions, is_default
+      save: address
+      render: address.show with:address
+
+    show:
+      render: address.show with:address
+
+    update:
+      validate: label, address_line, city, postal_code, latitude, longitude, instructions, is_default
+      update: address
+      render: address.show with:address
+
+    destroy:
+      delete: address
+      redirect: address.index
+
+
+  Api/Client/Beneficiary:
+    index:
+      query: all
+      render: beneficiary.index with:beneficiaries
+
+    store:
+      validate: first_name, last_name, relationship, gender, date_of_birth, phone, medical_notes, is_default
+      save: beneficiary
+      render: beneficiary.show with:beneficiary
+
+    show:
+      render: beneficiary.show with:beneficiary
+
+    update:
+      validate: first_name, last_name, relationship, gender, date_of_birth, phone, medical_notes, is_default
+      update: beneficiary
+      render: beneficiary.show with:beneficiary
+
+    destroy:
+      delete: beneficiary
+      redirect: beneficiary.index
+
+
+  Api/Client/Service:
+    index:
+      query: all
+      render: service.index with:services
+
+    show:
+      render: service.show with:service
+
+
+  Api/Client/CareRequest:
+    index:
+      query: all
+      render: care_request.index with:careRequests
+
+    store:
+      validate: beneficiary_id, service_id, address_id, scheduled_at, notes
+      save: careRequest
+      render: care_request.show with:careRequest
+
+    show:
+      render: care_request.show with:careRequest
+
+    update:
+      validate: beneficiary_id, service_id, address_id, scheduled_at, notes
+      update: careRequest
+      render: care_request.show with:careRequest
+
+
+seeders:
+  ServiceCategory, Service
