@@ -37,6 +37,21 @@ class ServiceCategory extends Model
         ];
     }
 
+    /**
+     * Get translated name for current locale or request header.
+     */
+    public function getTranslatedName(?string $locale = null): string
+    {
+        $locale = $locale ?: app()->getLocale();
+        $name = $this->name;
+
+        if (is_array($name)) {
+            return $name[$locale] ?? $name['fr'] ?? $name['en'] ?? reset($name) ?: '';
+        }
+
+        return (string) $name;
+    }
+
     public function services(): HasMany
     {
         return $this->hasMany(Service::class);

@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class CareRequest extends Model
 {
@@ -17,12 +18,23 @@ class CareRequest extends Model
      */
     protected $fillable = [
         'uuid',
+        'reference',
         'user_id',
         'beneficiary_id',
         'service_id',
         'address_id',
+        'urgent',
+        'date',
+        'time',
         'scheduled_at',
+        'duration_hours',
+        'description',
         'notes',
+        'perimeter',
+        'evaluation',
+        'gender',
+        'certified',
+        'free_mobility',
         'status',
         'address_label',
         'address_line',
@@ -46,7 +58,14 @@ class CareRequest extends Model
             'beneficiary_id' => 'integer',
             'service_id' => 'integer',
             'address_id' => 'integer',
+            'urgent' => 'boolean',
+            'date' => 'date:Y-m-d',
             'scheduled_at' => 'datetime',
+            'duration_hours' => 'float',
+            'perimeter' => 'integer',
+            'evaluation' => 'float',
+            'certified' => 'boolean',
+            'free_mobility' => 'boolean',
             'latitude' => 'decimal:7',
             'longitude' => 'decimal:7',
             'cancelled_at' => 'datetime',
@@ -71,5 +90,10 @@ class CareRequest extends Model
     public function address(): BelongsTo
     {
         return $this->belongsTo(Address::class);
+    }
+
+    public function documents(): HasMany
+    {
+        return $this->hasMany(CareRequestDocument::class);
     }
 }

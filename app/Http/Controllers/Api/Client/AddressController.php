@@ -25,9 +25,18 @@ class AddressController extends Controller
     {
         $data = $request->validated();
         $data['user_id'] = auth()->id();
+
+        if (! empty($data['is_default'])) {
+            Address::where('user_id', auth()->id())->update(['is_default' => false]);
+        }
+
         $address = Address::create($data);
 
-        return response()->json($address, 201);
+        return response()->json([
+            'message' => 'Adresse ajoutée avec succès.',
+            'address' => $address,
+            'data' => $address,
+        ], 201);
     }
 
     public function show(Request $request, Address $address): JsonResponse
@@ -37,9 +46,19 @@ class AddressController extends Controller
 
     public function update(AddressUpdateRequest $request, Address $address): JsonResponse
     {
-        $address->update($request->validated());
+        $data = $request->validated();
 
-        return response()->json($address);
+        if (! empty($data['is_default'])) {
+            Address::where('user_id', auth()->id())->where('id', '!=', $address->id)->update(['is_default' => false]);
+        }
+
+        $address->update($data);
+
+        return response()->json([
+            'message' => 'Adresse mise à jour avec succès.',
+            'address' => $address,
+            'data' => $address,
+        ]);
     }
 
     public function destroy(Request $request, Address $address): JsonResponse

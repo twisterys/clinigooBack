@@ -4,6 +4,7 @@ use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\Client\AddressController;
 use App\Http\Controllers\Api\Client\BeneficiaryController;
 use App\Http\Controllers\Api\Client\CareRequestController;
+use App\Http\Controllers\Api\Client\ServiceCategoryController;
 use App\Http\Controllers\Api\Client\ServiceController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
@@ -32,6 +33,7 @@ Route::middleware('auth:api')->group(function () {
 
     Route::resource('beneficiaries', BeneficiaryController::class)->except('create', 'edit');
 
+    Route::resource('service-categories', ServiceCategoryController::class)->only('index', 'show');
     Route::get('services/recent', [ServiceController::class, 'recent']);
     Route::resource('services', ServiceController::class)->only('index', 'show');
 

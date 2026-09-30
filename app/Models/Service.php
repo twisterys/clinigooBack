@@ -48,6 +48,36 @@ class Service extends Model
         ];
     }
 
+    /**
+     * Get translated name for current locale or request header.
+     */
+    public function getTranslatedName(?string $locale = null): string
+    {
+        $locale = $locale ?: app()->getLocale();
+        $name = $this->name;
+
+        if (is_array($name)) {
+            return $name[$locale] ?? $name['fr'] ?? $name['en'] ?? reset($name) ?: '';
+        }
+
+        return (string) $name;
+    }
+
+    /**
+     * Get translated description for current locale or request header.
+     */
+    public function getTranslatedDescription(?string $locale = null): string
+    {
+        $locale = $locale ?: app()->getLocale();
+        $desc = $this->short_description ?? $this->description;
+
+        if (is_array($desc)) {
+            return $desc[$locale] ?? $desc['fr'] ?? $desc['en'] ?? reset($desc) ?: '';
+        }
+
+        return (string) $desc;
+    }
+
     public function serviceCategory(): BelongsTo
     {
         return $this->belongsTo(ServiceCategory::class);
