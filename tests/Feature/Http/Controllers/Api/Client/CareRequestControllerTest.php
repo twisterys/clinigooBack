@@ -4,7 +4,6 @@ namespace Tests\Feature\Http\Controllers\Api\Client;
 
 use App\Http\Controllers\Api\Client\CareRequestController;
 use App\Http\Requests\Api\Client\CareRequestStoreRequest;
-use App\Http\Requests\Api\Client\CareRequestUpdateRequest;
 use App\Models\Address;
 use App\Models\Beneficiary;
 use App\Models\CareRequest;

@@ -2,13 +2,13 @@
 
 namespace Tests\Feature\Http\Controllers\Api\Client;
 
-use App\Http\Controllers\Api\Client\AddressController;
 use App\Http\Requests\Api\Client\AddressStoreRequest;
 use App\Http\Requests\Api\Client\AddressUpdateRequest;
-use App\Models\Address;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Foundation\Testing\WithFaker;
-use JMac\Testing\Traits\AdditionalAssertions;
+use Modules\Address\Http\Controllers\Api\Client\AddressController;
+use Modules\Address\Models\Address;
+use Modules\User\Models\User;
 use PHPUnit\Framework\Attributes\Test;
 use Tests\TestCase;
 
@@ -17,18 +17,17 @@ use Tests\TestCase;
  */
 final class AddressControllerTest extends TestCase
 {
-    use AdditionalAssertions, RefreshDatabase, WithFaker;
+    use RefreshDatabase, WithFaker;
 
     #[Test]
     public function index_displays_view(): void
     {
+        $user = User::factory()->create();
         $addresses = Address::factory()->count(3)->create();
 
-        $response = $this->get(route('addresses.index'));
+        $response = $this->actingAs($user, 'api')->get(route('addresses.index'));
 
         $response->assertOk();
-        $response->assertViewIs('address.index');
-        $response->assertViewHas('addresses', $addresses);
     }
 
     #[Test]

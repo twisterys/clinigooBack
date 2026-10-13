@@ -2,10 +2,10 @@
 
 namespace Database\Seeders;
 
-use App\Models\User;
 use Hash;
 use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
+use Modules\User\Models\User;
 
 class DatabaseSeeder extends Seeder
 {
@@ -22,9 +22,8 @@ class DatabaseSeeder extends Seeder
             'name' => 'Test User',
             'email' => 'test@example.com',
             'password' => Hash::make('password'),
+            'type' => 'admin',
         ]);
-
-        $this->call(ServiceCategorySeeder::class);
 
     }
 }

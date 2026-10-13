@@ -2,11 +2,14 @@
 
 namespace Database\Factories;
 
-use App\Models\ServiceCategory;
 use Illuminate\Database\Eloquent\Factories\Factory;
+use Modules\Service\Models\Service;
+use Modules\Service\Models\ServiceCategory;
 
 class ServiceFactory extends Factory
 {
+    protected $model = Service::class;
+
     /**
      * Define the model's default state.
      */
@@ -14,16 +17,13 @@ class ServiceFactory extends Factory
     {
         return [
             'service_category_id' => ServiceCategory::factory(),
-            'name' => '{}',
-            'slug' => fake()->slug(),
-            'short_description' => '{}',
-            'description' => '{}',
+            'name' => fake()->words(3, true),
+            'description' => fake()->sentence(),
             'icon' => fake()->word(),
-            'image' => fake()->word(),
-            'base_price' => fake()->randomFloat(2, 0, 99999999.99),
-            'duration_minutes' => fake()->numberBetween(-10000, 10000),
+            'base_price' => fake()->randomFloat(2, 50, 500),
+            'duration_minutes' => fake()->numberBetween(30, 120),
             'is_active' => fake()->boolean(),
-            'sort_order' => fake()->numberBetween(-10000, 10000),
+            'sort_order' => fake()->numberBetween(0, 10),
         ];
     }
 }

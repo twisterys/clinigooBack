@@ -2,16 +2,21 @@
 
 namespace Database\Factories;
 
-use App\Models\User;
 use Illuminate\Database\Eloquent\Factories\Factory;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
+use Modules\User\Enums\UserType;
+use Modules\User\Models\PatientProfile;
+use Modules\User\Models\ProfessionalProfile;
+use Modules\User\Models\User;
 
 /**
  * @extends Factory<User>
  */
 class UserFactory extends Factory
 {
+    protected $model = User::class;
+
     /**
      * The current password being used by the factory.
      */
@@ -27,6 +32,7 @@ class UserFactory extends Factory
         return [
             'name' => fake()->name(),
             'email' => fake()->unique()->safeEmail(),
+            'type' => UserType::Patient->value,
             'email_verified_at' => now(),
             'password' => static::$password ??= Hash::make('password'),
             'remember_token' => Str::random(10),
@@ -34,6 +40,62 @@ class UserFactory extends Factory
             'two_factor_recovery_codes' => null,
             'two_factor_confirmed_at' => null,
         ];
+    }
+
+    /**
+     * Indicate that the user is a patient.
+     */
+    public function patient(): static
+    {
+        return $this->state(fn (array $attributes) => [
+            'type' => UserType::Patient->value,
+        ]);
+    }
+
+    /**
+     * Indicate that the user is a professional.
+     */
+    public function professional(): static
+    {
+        return $this->state(fn (array $attributes) => [
+            'type' => UserType::Professional->value,
+        ]);
+    }
+
+    /**
+     * Indicate that the user is an admin.
+     */
+    public function admin(): static
+    {
+        return $this->state(fn (array $attributes) => [
+            'type' => UserType::Admin->value,
+        ]);
+    }
+
+    /**
+     * Include a patient profile with the user.
+     *
+     * @param  array<string, mixed>  $attributes
+     */
+    public function withPatientProfile(array $attributes = []): static
+    {
+        return $this->patient()->has(
+            PatientProfile::factory()->state($attributes),
+            'patientProfile'
+        );
+    }
+
+    /**
+     * Include a professional profile with the user.
+     *
+     * @param  array<string, mixed>  $attributes
+     */
+    public function withProfessionalProfile(array $attributes = []): static
+    {
+        return $this->professional()->has(
+            ProfessionalProfile::factory()->state($attributes),
+            'professionalProfile'
+        );
     }
 
     /**

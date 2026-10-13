@@ -2,40 +2,88 @@
 
 namespace Tests\Feature\Http\Controllers\Api\Client;
 
-use App\Http\Controllers\Api\Client\ServiceController;
-use App\Models\Service;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Auth;
+use Modules\Service\Models\Service;
+use Modules\Service\Models\ServiceCategory;
+use Modules\User\Models\User;
 use PHPUnit\Framework\Attributes\Test;
 use Tests\TestCase;
 
-/**
- * @see ServiceController
- */
 final class ServiceControllerTest extends TestCase
 {
     use RefreshDatabase;
 
-    #[Test]
-    public function index_displays_view(): void
+    private User $user;
+
+    private string $token;
+
+    protected function setUp(): void
     {
-        $services = Service::factory()->count(3)->create();
+        parent::setUp();
 
-        $response = $this->get(route('services.index'));
-
-        $response->assertOk();
-        $response->assertViewIs('service.index');
-        $response->assertViewHas('services', $services);
+        $this->user = User::factory()->patient()->create();
+        $this->token = Auth::guard('api')->login($this->user);
     }
 
     #[Test]
-    public function show_displays_view(): void
+    public function index_returns_services_list(): void
     {
-        $service = Service::factory()->create();
+        $category = ServiceCategory::factory()->create();
+        Service::factory()->count(3)->create([
+            'service_category_id' => $category->id,
+            'is_active' => true,
+        ]);
 
-        $response = $this->get(route('services.show', $service));
+        $response = $this->withHeader('Authorization', "Bearer {$this->token}")
+            ->getJson('/api/services');
 
-        $response->assertOk();
-        $response->assertViewIs('service.show');
-        $response->assertViewHas('service', $service);
+        $response->assertOk()
+            ->assertJsonStructure([
+                'items' => [
+                    '*' => [
+                        'id',
+                        'service_category',
+                        'name',
+                        'description',
+                        'icon',
+                        'base_price',
+                        'defaultDurationHours',
+                    ],
+                ],
+                'data',
+            ]);
+    }
+
+    #[Test]
+    public function show_returns_single_service(): void
+    {
+        $category = ServiceCategory::factory()->create();
+        $service = Service::factory()->create([
+            'service_category_id' => $category->id,
+            'is_active' => true,
+        ]);
+
+        $response = $this->withHeader('Authorization', "Bearer {$this->token}")
+            ->getJson("/api/services/{$service->id}");
+
+        $response->assertOk()
+            ->assertJsonPath('id', (string) $service->id);
+    }
+
+    #[Test]
+    public function recent_returns_recent_services(): void
+    {
+        $category = ServiceCategory::factory()->create();
+        Service::factory()->count(4)->create([
+            'service_category_id' => $category->id,
+            'is_active' => true,
+        ]);
+
+        $response = $this->withHeader('Authorization', "Bearer {$this->token}")
+            ->getJson('/api/services/recent');
+
+        $response->assertOk()
+            ->assertJsonStructure(['items', 'data']);
     }
 }

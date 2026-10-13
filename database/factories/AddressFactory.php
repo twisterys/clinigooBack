@@ -2,11 +2,14 @@
 
 namespace Database\Factories;
 
-use App\Models\User;
 use Illuminate\Database\Eloquent\Factories\Factory;
+use Modules\Address\Models\Address;
+use Modules\User\Models\User;
 
 class AddressFactory extends Factory
 {
+    protected $model = Address::class;
+
     /**
      * Define the model's default state.
      */
