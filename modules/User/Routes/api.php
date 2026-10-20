@@ -65,6 +65,7 @@ Route::group([
     Route::post('{id}/verify', [AdminProfessionalController::class, 'verifyDossier']);
     Route::post('{id}/review-changes', [AdminProfessionalController::class, 'reviewSensitiveChanges']);
     Route::put('{id}/services', [AdminProfessionalController::class, 'updateServices']);
+    Route::put('{id}/password', [AdminProfessionalController::class, 'updatePassword']);
     Route::get('{id}/history', [AdminProfessionalController::class, 'history']);
     Route::get('{id}/documents/{documentId}/download', [AdminProfessionalController::class, 'downloadDocument']);
 });

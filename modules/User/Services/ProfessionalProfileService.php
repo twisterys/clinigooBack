@@ -466,10 +466,17 @@ class ProfessionalProfileService
         ?string $reason,
         User $admin,
     ): ProfessionalDocument {
+        if (! $document->status->isPending()) {
+            throw ValidationException::withMessages([
+                'document' => ['Ce document a déjà été traité et ne peut plus être vérifié.'],
+            ]);
+        }
+
         $profile = $document->professionalProfile;
         $docName = $document->professionDocument?->name ?? 'Document';
 
         if ($decision === 'validate') {
+            $documentStatusBefore = $document->status->value;
             $document->update([
                 'status' => DocumentVerificationStatus::Validated,
                 'rejection_reason' => null,
@@ -480,7 +487,12 @@ class ProfessionalProfileService
             $profile->recordHistory(
                 ProfessionalHistoryAction::DocumentValidated,
                 "Document '{$docName}' validé par l'administration.",
-                ['document_id' => $document->id],
+                [
+                    'document_id' => $document->id,
+                    'document_name' => $docName,
+                    'document_status_before' => $documentStatusBefore,
+                    'document_status_after' => DocumentVerificationStatus::Validated->value,
+                ],
                 $admin
             );
         } elseif ($decision === 'reject') {
@@ -490,6 +502,7 @@ class ProfessionalProfileService
                 ]);
             }
 
+            $documentStatusBefore = $document->status->value;
             $document->update([
                 'status' => DocumentVerificationStatus::Rejected,
                 'rejection_reason' => $reason,
@@ -500,7 +513,12 @@ class ProfessionalProfileService
             $profile->recordHistory(
                 ProfessionalHistoryAction::DocumentRejected,
                 $reason,
-                ['document_id' => $document->id, 'document_name' => $docName],
+                [
+                    'document_id' => $document->id,
+                    'document_name' => $docName,
+                    'document_status_before' => $documentStatusBefore,
+                    'document_status_after' => DocumentVerificationStatus::Rejected->value,
+                ],
                 $admin
             );
         } else {

@@ -160,6 +160,25 @@ class ProfessionalController extends Controller
     }
 
     /**
+     * Set a professional's password from the admin dossier.
+     */
+    public function updatePassword(Request $request, int $profileId): JsonResponse
+    {
+        $validated = $request->validate([
+            'password' => ['required', 'string', 'min:8', 'confirmed'],
+        ]);
+
+        $profile = ProfessionalProfile::with('user')->findOrFail($profileId);
+        abort_unless($profile->user && $profile->user->isProfessional(), 404);
+
+        // The User model's hashed cast securely hashes this value.
+        $profile->user->password = $validated['password'];
+        $profile->user->save();
+
+        return response()->json(['message' => 'Mot de passe du professionnel modifié avec succès.']);
+    }
+
+    /**
      * Get history of decisions and verification events for a professional.
      */
     public function history(int $profileId): JsonResponse

@@ -162,6 +162,14 @@ test("scenario 1: complete registration, document upload, submission and admin a
             ]);
         $verifyDocRes->assertOk()
             ->assertJsonPath("document.status", "validated");
+
+        $retryValidatedDocument = $this->withHeader("Authorization", "Bearer {$adminToken}")
+            ->postJson("/api/admin/professionals/{$profile->id}/documents/{$d->id}/verify", [
+                "decision" => "reject",
+                "reason" => "Tentative de modification d'une décision définitive.",
+            ]);
+        $retryValidatedDocument->assertStatus(422)
+            ->assertJsonValidationErrors(["document"]);
     }
 
     $verifyDossierRes = $this->withHeader("Authorization", "Bearer {$adminToken}")
@@ -228,6 +236,13 @@ test("scenario 2: document rejected with motive, replaced by pro, already approv
     $rejectDocRes->assertOk()
         ->assertJsonPath("document.status", "rejected")
         ->assertJsonPath("document.rejection_reason", "Le document est flou et illisible. Veuillez fournir un scan net.");
+
+    $retryRejectedDocument = $this->withHeader("Authorization", "Bearer {$adminToken}")
+        ->postJson("/api/admin/professionals/{$profile->id}/documents/{$diplomaDoc->id}/verify", [
+            "decision" => "validate",
+        ]);
+    $retryRejectedDocument->assertStatus(422)
+        ->assertJsonValidationErrors(["document"]);
 
     $failReject = $this->withHeader("Authorization", "Bearer {$adminToken}")
         ->postJson("/api/admin/professionals/{$profile->id}/documents/{$diplomaDoc->id}/verify", [
