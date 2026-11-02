@@ -2,8 +2,8 @@
 
 namespace Database\Factories;
 
+use App\Models\ProfessionDocument;
 use Illuminate\Database\Eloquent\Factories\Factory;
-use Modules\Professions\Models\ProfessionDocument;
 
 /**
  * @extends Factory<ProfessionDocument>

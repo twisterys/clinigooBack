@@ -1,12 +1,11 @@
 <?php
 
+use App\Models\Profession;
+use App\Models\ProfessionDocument;
+use App\Models\Service;
+use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Auth;
-use Modules\Professions\Models\Profession;
-use Modules\Professions\Models\ProfessionDocument;
-use Modules\Service\Models\Service;
-use Modules\Service\Models\ServiceCategory;
-use Modules\User\Models\User;
 
 uses(RefreshDatabase::class);
 
@@ -22,8 +21,7 @@ test('clients can list active professions with services and documents', function
     $user = User::factory()->patient()->create();
     $token = Auth::guard('api')->login($user);
 
-    $category = ServiceCategory::factory()->create();
-    $service = Service::factory()->create(['service_category_id' => $category->id]);
+    $service = Service::factory()->create();
 
     $doc = ProfessionDocument::factory()->create([
         'name' => 'Carte CPS',
@@ -68,8 +66,7 @@ test('clients can view single profession with required and optional documents', 
     $user = User::factory()->patient()->create();
     $token = Auth::guard('api')->login($user);
 
-    $category = ServiceCategory::factory()->create();
-    $service = Service::factory()->create(['service_category_id' => $category->id]);
+    $service = Service::factory()->create();
 
     $reqDoc = ProfessionDocument::factory()->create([
         'name' => 'Diplôme',
@@ -168,9 +165,8 @@ test('admin can create profession with services and documents with required pivo
     $admin = User::factory()->admin()->create();
     $token = Auth::guard('admin')->login($admin);
 
-    $category = ServiceCategory::factory()->create();
-    $service1 = Service::factory()->create(['service_category_id' => $category->id]);
-    $service2 = Service::factory()->create(['service_category_id' => $category->id]);
+    $service1 = Service::factory()->create();
+    $service2 = Service::factory()->create();
 
     $doc1 = ProfessionDocument::factory()->create(['name' => 'Diplome']);
     $doc2 = ProfessionDocument::factory()->create(['name' => 'Casier']);
@@ -220,9 +216,8 @@ test('admin can update profession and sync its services and documents', function
     $admin = User::factory()->admin()->create();
     $token = Auth::guard('admin')->login($admin);
 
-    $category = ServiceCategory::factory()->create();
-    $service1 = Service::factory()->create(['service_category_id' => $category->id]);
-    $service2 = Service::factory()->create(['service_category_id' => $category->id]);
+    $service1 = Service::factory()->create();
+    $service2 = Service::factory()->create();
 
     $doc1 = ProfessionDocument::factory()->create();
     $doc2 = ProfessionDocument::factory()->create();
@@ -309,8 +304,7 @@ test('profession document checks if format is allowed', function () {
 });
 
 test('service model has inverse professions relationship', function () {
-    $category = ServiceCategory::factory()->create();
-    $service = Service::factory()->create(['service_category_id' => $category->id]);
+    $service = Service::factory()->create();
     $profession = Profession::factory()->create();
 
     $service->professions()->attach($profession->id);

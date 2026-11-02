@@ -5,20 +5,16 @@ created:
     - app/Http/Controllers/Api/Client/CareRequestController.php
     - database/factories/AddressFactory.php
     - database/factories/BeneficiaryFactory.php
-    - database/factories/ServiceCategoryFactory.php
     - database/factories/ServiceFactory.php
     - database/factories/CareRequestFactory.php
     - database/migrations/2026_09_25_135556_create_addresses_table.php
     - database/migrations/2026_09_25_135557_create_beneficiaries_table.php
-    - database/migrations/2026_09_25_135558_create_service_categories_table.php
     - database/migrations/2026_09_25_135559_create_services_table.php
     - database/migrations/2026_09_25_135600_create_care_requests_table.php
     - app/Models/Address.php
     - app/Models/Beneficiary.php
-    - app/Models/ServiceCategory.php
     - app/Models/Service.php
     - app/Models/CareRequest.php
-    - database/seeders/ServiceCategorySeeder.php
     - database/seeders/ServiceSeeder.php
     - tests/Feature/Http/Controllers/Api/Client/AddressControllerTest.php
     - tests/Feature/Http/Controllers/Api/Client/BeneficiaryControllerTest.php
@@ -50,6 +46,5 @@ skipped:
 models:
     Address: { user_id: 'id foreign:users', label: 'string nullable', address_line: string, city: string, postal_code: 'string nullable', latitude: 'decimal:10,7 nullable', longitude: 'decimal:10,7 nullable', instructions: 'text nullable', is_default: 'boolean default:false', relationships: { belongsTo: User, hasMany: CareRequest } }
     Beneficiary: { user_id: 'id foreign:users', first_name: string, last_name: string, relationship: 'string nullable', gender: 'string nullable', date_of_birth: 'date nullable', phone: 'string nullable', medical_notes: 'text nullable', is_default: 'boolean default:false', relationships: { belongsTo: User, hasMany: CareRequest } }
-    ServiceCategory: { name: json, slug: 'string unique', icon: 'string nullable', sort_order: 'integer default:0', is_active: 'boolean default:true', relationships: { hasMany: Service } }
-    Service: { service_category_id: 'id foreign:service_categories', name: json, slug: 'string unique', short_description: 'json nullable', description: 'json nullable', icon: 'string nullable', image: 'string nullable', base_price: 'decimal:10,2 nullable', duration_minutes: 'integer nullable', is_active: 'boolean default:true', sort_order: 'integer default:0', relationships: { belongsTo: ServiceCategory, hasMany: CareRequest } }
+    Service: { name: json, slug: 'string unique', short_description: 'json nullable', description: 'json nullable', icon: 'string nullable', image: 'string nullable', base_price: 'decimal:10,2 nullable', duration_minutes: 'integer nullable', is_active: 'boolean default:true', sort_order: 'integer default:0', relationships: { hasMany: CareRequest } }
     CareRequest: { uuid: 'uuid unique', user_id: 'id foreign:users', beneficiary_id: 'id foreign:beneficiaries', service_id: 'id foreign:services', address_id: 'id foreign:addresses nullable', scheduled_at: datetime, notes: 'text nullable', status: 'string default:pending', address_label: 'string nullable', address_line: string, city: string, latitude: 'decimal:10,7 nullable', longitude: 'decimal:10,7 nullable', address_instructions: 'text nullable', cancelled_at: 'datetime nullable', relationships: { belongsTo: 'User, Beneficiary, Service, Address' } }

@@ -2,9 +2,9 @@
 
 namespace Database\Factories;
 
+use App\Models\PatientProfile;
+use App\Models\User;
 use Illuminate\Database\Eloquent\Factories\Factory;
-use Modules\User\Models\PatientProfile;
-use Modules\User\Models\User;
 
 /**
  * @extends Factory<PatientProfile>

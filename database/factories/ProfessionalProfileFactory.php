@@ -2,11 +2,11 @@
 
 namespace Database\Factories;
 
+use App\Enums\ProfessionalStatus;
+use App\Models\Profession;
+use App\Models\ProfessionalProfile;
+use App\Models\User;
 use Illuminate\Database\Eloquent\Factories\Factory;
-use Modules\Professions\Models\Profession;
-use Modules\User\Enums\ProfessionalStatus;
-use Modules\User\Models\ProfessionalProfile;
-use Modules\User\Models\User;
 
 /**
  * @extends Factory<ProfessionalProfile>

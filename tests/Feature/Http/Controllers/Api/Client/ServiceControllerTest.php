@@ -2,11 +2,10 @@
 
 namespace Tests\Feature\Http\Controllers\Api\Client;
 
+use App\Models\Service;
+use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Auth;
-use Modules\Service\Models\Service;
-use Modules\Service\Models\ServiceCategory;
-use Modules\User\Models\User;
 use PHPUnit\Framework\Attributes\Test;
 use Tests\TestCase;
 
@@ -29,9 +28,7 @@ final class ServiceControllerTest extends TestCase
     #[Test]
     public function index_returns_services_list(): void
     {
-        $category = ServiceCategory::factory()->create();
         Service::factory()->count(3)->create([
-            'service_category_id' => $category->id,
             'is_active' => true,
         ]);
 
@@ -43,7 +40,6 @@ final class ServiceControllerTest extends TestCase
                 'items' => [
                     '*' => [
                         'id',
-                        'service_category',
                         'name',
                         'description',
                         'icon',
@@ -58,9 +54,7 @@ final class ServiceControllerTest extends TestCase
     #[Test]
     public function show_returns_single_service(): void
     {
-        $category = ServiceCategory::factory()->create();
         $service = Service::factory()->create([
-            'service_category_id' => $category->id,
             'is_active' => true,
         ]);
 
@@ -74,9 +68,7 @@ final class ServiceControllerTest extends TestCase
     #[Test]
     public function recent_returns_recent_services(): void
     {
-        $category = ServiceCategory::factory()->create();
         Service::factory()->count(4)->create([
-            'service_category_id' => $category->id,
             'is_active' => true,
         ]);
 

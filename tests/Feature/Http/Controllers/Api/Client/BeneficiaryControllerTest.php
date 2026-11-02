@@ -6,9 +6,9 @@ use App\Http\Controllers\Api\Client\BeneficiaryController;
 use App\Http\Requests\Api\Client\BeneficiaryStoreRequest;
 use App\Http\Requests\Api\Client\BeneficiaryUpdateRequest;
 use App\Models\Beneficiary;
+use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Foundation\Testing\WithFaker;
-use Illuminate\Support\Carbon;
 use JMac\Testing\Traits\AdditionalAssertions;
 use PHPUnit\Framework\Attributes\Test;
 use Tests\TestCase;
@@ -20,16 +20,24 @@ final class BeneficiaryControllerTest extends TestCase
 {
     use AdditionalAssertions, RefreshDatabase, WithFaker;
 
+    private User $user;
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+        $this->user = User::factory()->create();
+        $this->actingAs($this->user, 'api');
+    }
+
     #[Test]
     public function index_displays_view(): void
     {
-        $beneficiaries = Beneficiary::factory()->count(3)->create();
+        Beneficiary::factory()->count(3)->create(['user_id' => $this->user->id]);
 
-        $response = $this->get(route('beneficiaries.index'));
+        $response = $this->getJson(route('beneficiaries.index'));
 
         $response->assertOk();
-        $response->assertViewIs('beneficiary.index');
-        $response->assertViewHas('beneficiaries', $beneficiaries);
+        $response->assertJsonStructure(['items', 'data']);
     }
 
     #[Test]
@@ -45,54 +53,36 @@ final class BeneficiaryControllerTest extends TestCase
     #[Test]
     public function store_saves_and_displays_view(): void
     {
-        $first_name = fake()->firstName();
-        $last_name = fake()->lastName();
-        $relationship = fake()->word();
-        $gender = fake()->word();
-        $date_of_birth = Carbon::parse(fake()->date());
-        $phone = fake()->phoneNumber();
-        $medical_notes = fake()->text();
-        $is_default = fake()->boolean();
+        $payload = [
+            'first_name' => 'Sara',
+            'last_name' => 'El Amrani',
+            'relationship' => 'mother',
+            'gender' => 'female',
+            'date_of_birth' => '1965-05-12',
+            'phone' => '+212600000000',
+            'medical_notes' => 'Diabetic',
+            'is_default' => true,
+        ];
 
-        $response = $this->post(route('beneficiaries.store'), [
-            'first_name' => $first_name,
-            'last_name' => $last_name,
-            'relationship' => $relationship,
-            'gender' => $gender,
-            'date_of_birth' => $date_of_birth,
-            'phone' => $phone,
-            'medical_notes' => $medical_notes,
-            'is_default' => $is_default,
+        $response = $this->postJson(route('beneficiaries.store'), $payload);
+
+        $response->assertCreated();
+        $this->assertDatabaseHas('beneficiaries', [
+            'user_id' => $this->user->id,
+            'first_name' => 'Sara',
+            'last_name' => 'El Amrani',
         ]);
-
-        $beneficiaries = Beneficiary::query()
-            ->where('first_name', $first_name)
-            ->where('last_name', $last_name)
-            ->where('relationship', $relationship)
-            ->where('gender', $gender)
-            ->where('date_of_birth', $date_of_birth)
-            ->where('phone', $phone)
-            ->where('medical_notes', $medical_notes)
-            ->where('is_default', $is_default)
-            ->get();
-        $this->assertCount(1, $beneficiaries);
-        $beneficiary = $beneficiaries->first();
-
-        $response->assertOk();
-        $response->assertViewIs('beneficiary.show');
-        $response->assertViewHas('beneficiary');
     }
 
     #[Test]
     public function show_displays_view(): void
     {
-        $beneficiary = Beneficiary::factory()->create();
+        $beneficiary = Beneficiary::factory()->create(['user_id' => $this->user->id]);
 
-        $response = $this->get(route('beneficiaries.show', $beneficiary));
+        $response = $this->getJson(route('beneficiaries.show', $beneficiary));
 
         $response->assertOk();
-        $response->assertViewIs('beneficiary.show');
-        $response->assertViewHas('beneficiary', $beneficiary);
+        $response->assertJsonPath('id', $beneficiary->id);
     }
 
     #[Test]
@@ -108,52 +98,30 @@ final class BeneficiaryControllerTest extends TestCase
     #[Test]
     public function update_displays_view(): void
     {
-        $beneficiary = Beneficiary::factory()->create();
-        $first_name = fake()->firstName();
-        $last_name = fake()->lastName();
-        $relationship = fake()->word();
-        $gender = fake()->word();
-        $date_of_birth = Carbon::parse(fake()->date());
-        $phone = fake()->phoneNumber();
-        $medical_notes = fake()->text();
-        $is_default = fake()->boolean();
+        $beneficiary = Beneficiary::factory()->create(['user_id' => $this->user->id]);
 
-        $response = $this->put(route('beneficiaries.update', $beneficiary), [
-            'first_name' => $first_name,
-            'last_name' => $last_name,
-            'relationship' => $relationship,
-            'gender' => $gender,
-            'date_of_birth' => $date_of_birth,
-            'phone' => $phone,
-            'medical_notes' => $medical_notes,
-            'is_default' => $is_default,
+        $response = $this->putJson(route('beneficiaries.update', $beneficiary), [
+            'first_name' => 'Fatima',
+            'last_name' => 'El Amrani',
+            'relationship' => 'mother',
+            'gender' => 'female',
         ]);
 
-        $beneficiary->refresh();
-
         $response->assertOk();
-        $response->assertViewIs('beneficiary.show');
-        $response->assertViewHas('beneficiary', $beneficiary);
-
-        $this->assertEquals($first_name, $beneficiary->first_name);
-        $this->assertEquals($last_name, $beneficiary->last_name);
-        $this->assertEquals($relationship, $beneficiary->relationship);
-        $this->assertEquals($gender, $beneficiary->gender);
-        $this->assertEquals($date_of_birth, $beneficiary->date_of_birth);
-        $this->assertEquals($phone, $beneficiary->phone);
-        $this->assertEquals($medical_notes, $beneficiary->medical_notes);
-        $this->assertEquals($is_default, $beneficiary->is_default);
+        $this->assertDatabaseHas('beneficiaries', [
+            'id' => $beneficiary->id,
+            'first_name' => 'Fatima',
+        ]);
     }
 
     #[Test]
     public function destroy_deletes_and_redirects(): void
     {
-        $beneficiary = Beneficiary::factory()->create();
+        $beneficiary = Beneficiary::factory()->create(['user_id' => $this->user->id]);
 
-        $response = $this->delete(route('beneficiaries.destroy', $beneficiary));
+        $response = $this->deleteJson(route('beneficiaries.destroy', $beneficiary));
 
-        $response->assertRedirect(route('beneficiary.index'));
-
+        $response->assertOk();
         $this->assertModelMissing($beneficiary);
     }
 }

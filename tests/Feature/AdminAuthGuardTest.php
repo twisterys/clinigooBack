@@ -1,8 +1,8 @@
 <?php
 
+use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Auth;
-use Modules\User\Models\User;
 
 uses(RefreshDatabase::class);
 

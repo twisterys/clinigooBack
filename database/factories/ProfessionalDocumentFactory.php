@@ -2,11 +2,11 @@
 
 namespace Database\Factories;
 
+use App\Enums\DocumentVerificationStatus;
+use App\Models\ProfessionalDocument;
+use App\Models\ProfessionalProfile;
+use App\Models\ProfessionDocument;
 use Illuminate\Database\Eloquent\Factories\Factory;
-use Modules\Professions\Models\ProfessionDocument;
-use Modules\User\Enums\DocumentVerificationStatus;
-use Modules\User\Models\ProfessionalDocument;
-use Modules\User\Models\ProfessionalProfile;
 
 /**
  * @extends Factory<ProfessionalDocument>

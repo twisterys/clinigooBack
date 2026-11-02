@@ -2,12 +2,12 @@
 
 namespace Database\Factories;
 
+use App\Models\Address;
+use App\Models\Beneficiary;
+use App\Models\CareRequest;
+use App\Models\Service;
+use App\Models\User;
 use Illuminate\Database\Eloquent\Factories\Factory;
-use Modules\Address\Models\Address;
-use Modules\Beneficiary\Models\Beneficiary;
-use Modules\CareRequest\Models\CareRequest;
-use Modules\Service\Models\Service;
-use Modules\User\Models\User;
 
 class CareRequestFactory extends Factory
 {

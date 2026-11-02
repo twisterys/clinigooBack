@@ -28,17 +28,7 @@ models:
       belongsTo: User
       hasMany: CareRequest
 
-  ServiceCategory:
-    name: json
-    slug: string unique
-    icon: string nullable
-    sort_order: integer default:0
-    is_active: boolean default:true
-    relationships:
-      hasMany: Service
-
   Service:
-    service_category_id: id foreign:service_categories
     name: json
     slug: string unique
     short_description: json nullable
@@ -50,7 +40,6 @@ models:
     is_active: boolean default:true
     sort_order: integer default:0
     relationships:
-      belongsTo: ServiceCategory
       hasMany: CareRequest
 
   CareRequest:
@@ -156,4 +145,4 @@ controllers:
 
 
 seeders:
-  ServiceCategory, Service
+  Service

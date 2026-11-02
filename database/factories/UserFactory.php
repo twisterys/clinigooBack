@@ -2,13 +2,13 @@
 
 namespace Database\Factories;
 
+use App\Enums\UserType;
+use App\Models\PatientProfile;
+use App\Models\ProfessionalProfile;
+use App\Models\User;
 use Illuminate\Database\Eloquent\Factories\Factory;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
-use Modules\User\Enums\UserType;
-use Modules\User\Models\PatientProfile;
-use Modules\User\Models\ProfessionalProfile;
-use Modules\User\Models\User;
 
 /**
  * @extends Factory<User>

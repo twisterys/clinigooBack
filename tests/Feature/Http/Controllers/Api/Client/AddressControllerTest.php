@@ -2,13 +2,14 @@
 
 namespace Tests\Feature\Http\Controllers\Api\Client;
 
+use App\Http\Controllers\Api\Client\AddressController;
 use App\Http\Requests\Api\Client\AddressStoreRequest;
 use App\Http\Requests\Api\Client\AddressUpdateRequest;
+use App\Models\Address;
+use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Foundation\Testing\WithFaker;
-use Modules\Address\Http\Controllers\Api\Client\AddressController;
-use Modules\Address\Models\Address;
-use Modules\User\Models\User;
+use JMac\Testing\Traits\AdditionalAssertions;
 use PHPUnit\Framework\Attributes\Test;
 use Tests\TestCase;
 
@@ -17,17 +18,26 @@ use Tests\TestCase;
  */
 final class AddressControllerTest extends TestCase
 {
-    use RefreshDatabase, WithFaker;
+    use AdditionalAssertions, RefreshDatabase, WithFaker;
+
+    private User $user;
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+        $this->user = User::factory()->create();
+        $this->actingAs($this->user, 'api');
+    }
 
     #[Test]
     public function index_displays_view(): void
     {
-        $user = User::factory()->create();
-        $addresses = Address::factory()->count(3)->create();
+        Address::factory()->count(3)->create(['user_id' => $this->user->id]);
 
-        $response = $this->actingAs($user, 'api')->get(route('addresses.index'));
+        $response = $this->getJson(route('addresses.index'));
 
         $response->assertOk();
+        $response->assertJsonStructure(['items', 'data']);
     }
 
     #[Test]
@@ -43,54 +53,37 @@ final class AddressControllerTest extends TestCase
     #[Test]
     public function store_saves_and_displays_view(): void
     {
-        $label = fake()->word();
-        $address_line = fake()->word();
-        $city = fake()->city();
-        $postal_code = fake()->postcode();
-        $latitude = fake()->latitude();
-        $longitude = fake()->longitude();
-        $instructions = fake()->text();
-        $is_default = fake()->boolean();
+        $payload = [
+            'label' => 'Home',
+            'address_line' => '123 Main St',
+            'city' => 'Tanger',
+            'postal_code' => '90000',
+            'latitude' => 35.7595,
+            'longitude' => -5.8340,
+            'instructions' => 'Near the park',
+            'is_default' => true,
+        ];
 
-        $response = $this->post(route('addresses.store'), [
-            'label' => $label,
-            'address_line' => $address_line,
-            'city' => $city,
-            'postal_code' => $postal_code,
-            'latitude' => $latitude,
-            'longitude' => $longitude,
-            'instructions' => $instructions,
-            'is_default' => $is_default,
+        $response = $this->postJson(route('addresses.store'), $payload);
+
+        $response->assertCreated();
+        $this->assertDatabaseHas('addresses', [
+            'user_id' => $this->user->id,
+            'label' => 'Home',
+            'address_line' => '123 Main St',
+            'city' => 'Tanger',
         ]);
-
-        $addresses = Address::query()
-            ->where('label', $label)
-            ->where('address_line', $address_line)
-            ->where('city', $city)
-            ->where('postal_code', $postal_code)
-            ->where('latitude', $latitude)
-            ->where('longitude', $longitude)
-            ->where('instructions', $instructions)
-            ->where('is_default', $is_default)
-            ->get();
-        $this->assertCount(1, $addresses);
-        $address = $addresses->first();
-
-        $response->assertOk();
-        $response->assertViewIs('address.show');
-        $response->assertViewHas('address');
     }
 
     #[Test]
     public function show_displays_view(): void
     {
-        $address = Address::factory()->create();
+        $address = Address::factory()->create(['user_id' => $this->user->id]);
 
-        $response = $this->get(route('addresses.show', $address));
+        $response = $this->getJson(route('addresses.show', $address));
 
         $response->assertOk();
-        $response->assertViewIs('address.show');
-        $response->assertViewHas('address', $address);
+        $response->assertJsonPath('id', $address->id);
     }
 
     #[Test]
@@ -106,52 +99,29 @@ final class AddressControllerTest extends TestCase
     #[Test]
     public function update_displays_view(): void
     {
-        $address = Address::factory()->create();
-        $label = fake()->word();
-        $address_line = fake()->word();
-        $city = fake()->city();
-        $postal_code = fake()->postcode();
-        $latitude = fake()->latitude();
-        $longitude = fake()->longitude();
-        $instructions = fake()->text();
-        $is_default = fake()->boolean();
+        $address = Address::factory()->create(['user_id' => $this->user->id]);
 
-        $response = $this->put(route('addresses.update', $address), [
-            'label' => $label,
-            'address_line' => $address_line,
-            'city' => $city,
-            'postal_code' => $postal_code,
-            'latitude' => $latitude,
-            'longitude' => $longitude,
-            'instructions' => $instructions,
-            'is_default' => $is_default,
+        $response = $this->putJson(route('addresses.update', $address), [
+            'label' => 'Work',
+            'address_line' => '456 Business Ave',
+            'city' => 'Tanger',
         ]);
 
-        $address->refresh();
-
         $response->assertOk();
-        $response->assertViewIs('address.show');
-        $response->assertViewHas('address', $address);
-
-        $this->assertEquals($label, $address->label);
-        $this->assertEquals($address_line, $address->address_line);
-        $this->assertEquals($city, $address->city);
-        $this->assertEquals($postal_code, $address->postal_code);
-        $this->assertEquals($latitude, $address->latitude);
-        $this->assertEquals($longitude, $address->longitude);
-        $this->assertEquals($instructions, $address->instructions);
-        $this->assertEquals($is_default, $address->is_default);
+        $this->assertDatabaseHas('addresses', [
+            'id' => $address->id,
+            'label' => 'Work',
+        ]);
     }
 
     #[Test]
     public function destroy_deletes_and_redirects(): void
     {
-        $address = Address::factory()->create();
+        $address = Address::factory()->create(['user_id' => $this->user->id]);
 
-        $response = $this->delete(route('addresses.destroy', $address));
+        $response = $this->deleteJson(route('addresses.destroy', $address));
 
-        $response->assertRedirect(route('address.index'));
-
+        $response->assertOk();
         $this->assertModelMissing($address);
     }
 }

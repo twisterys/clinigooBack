@@ -2,7 +2,9 @@
 
 namespace App\Providers;
 
+use App\Auth\AdminUserProvider;
 use Carbon\CarbonImmutable;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\ServiceProvider;
@@ -24,6 +26,17 @@ class AppServiceProvider extends ServiceProvider
     public function boot(): void
     {
         $this->configureDefaults();
+        $this->registerUserProviders();
+    }
+
+    /**
+     * Register custom authentication providers.
+     */
+    protected function registerUserProviders(): void
+    {
+        Auth::provider('admin-eloquent', function ($app, array $config) {
+            return new AdminUserProvider($app['hash'], $config['model']);
+        });
     }
 
     /**

@@ -2,9 +2,9 @@
 
 namespace Database\Factories;
 
+use App\Models\Address;
+use App\Models\User;
 use Illuminate\Database\Eloquent\Factories\Factory;
-use Modules\Address\Models\Address;
-use Modules\User\Models\User;
 
 class AddressFactory extends Factory
 {

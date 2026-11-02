@@ -1,7 +1,7 @@
 <?php
 
-use Modules\User\Models\Admin;
-use Modules\User\Models\User;
+use App\Models\Admin;
+use App\Models\User;
 
 return [
 

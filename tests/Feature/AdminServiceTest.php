@@ -1,19 +1,16 @@
 <?php
 
+use App\Models\Service;
+use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Storage;
-use Modules\Service\Models\Service;
-use Modules\Service\Models\ServiceCategory;
-use Modules\User\Models\User;
 
 uses(RefreshDatabase::class);
 
 test('unauthenticated users cannot update a service', function () {
-    $category = ServiceCategory::factory()->create();
     $service = Service::factory()->create([
-        'service_category_id' => $category->id,
         'name' => 'Initial Name',
     ]);
 
@@ -28,9 +25,7 @@ test('non-admin users cannot update a service', function () {
     $patient = User::factory()->patient()->create();
     $token = Auth::guard('api')->login($patient);
 
-    $category = ServiceCategory::factory()->create();
     $service = Service::factory()->create([
-        'service_category_id' => $category->id,
         'name' => 'Initial Name',
     ]);
 
@@ -46,8 +41,7 @@ test('admin can list services with filters and datatable', function () {
     $admin = User::factory()->admin()->create();
     $token = Auth::guard('admin')->login($admin);
 
-    $category = ServiceCategory::factory()->create();
-    Service::factory()->count(3)->create(['service_category_id' => $category->id]);
+    Service::factory()->count(3)->create();
 
     $response = $this->withHeader('Authorization', "Bearer {$token}")
         ->getJson('/api/admin/services');
@@ -62,12 +56,10 @@ test('admin can create a service', function () {
     $admin = User::factory()->admin()->create();
     $token = Auth::guard('admin')->login($admin);
 
-    $category = ServiceCategory::factory()->create();
     $icon = UploadedFile::fake()->image('icon.png');
 
     $response = $this->withHeader('Authorization', "Bearer {$token}")
         ->postJson('/api/admin/services', [
-            'service_category_id' => $category->id,
             'name' => 'New Service',
             'description' => 'New Service Description',
             'base_price' => 120.00,
@@ -79,7 +71,6 @@ test('admin can create a service', function () {
     $response->assertStatus(201)
         ->assertJson([
             'name' => 'New Service',
-            'service_category_id' => $category->id,
             'base_price' => '120.00',
             'duration_minutes' => 45,
             'is_active' => true,
@@ -94,11 +85,7 @@ test('admin can update a service details', function () {
     $admin = User::factory()->admin()->create();
     $token = Auth::guard('admin')->login($admin);
 
-    $category = ServiceCategory::factory()->create(['name' => 'General Medicine']);
-    $newCategory = ServiceCategory::factory()->create(['name' => 'Nursing']);
-
     $service = Service::factory()->create([
-        'service_category_id' => $category->id,
         'name' => 'Old Service Name',
         'description' => 'Old description',
         'base_price' => 100.00,
@@ -107,7 +94,6 @@ test('admin can update a service details', function () {
     ]);
 
     $payload = [
-        'service_category_id' => $newCategory->id,
         'name' => 'Updated Service Name',
         'description' => 'Updated service description',
         'base_price' => 150.00,
@@ -121,7 +107,6 @@ test('admin can update a service details', function () {
     $response->assertOk()
         ->assertJson([
             'id' => $service->id,
-            'service_category_id' => $newCategory->id,
             'name' => 'Updated Service Name',
             'description' => 'Updated service description',
             'base_price' => '150.00',
@@ -131,7 +116,6 @@ test('admin can update a service details', function () {
 
     $this->assertDatabaseHas('services', [
         'id' => $service->id,
-        'service_category_id' => $newCategory->id,
         'name' => 'Updated Service Name',
         'description' => 'Updated service description',
         'base_price' => 150.00,
@@ -146,9 +130,7 @@ test('admin can update a service icon', function () {
     $admin = User::factory()->admin()->create();
     $token = Auth::guard('admin')->login($admin);
 
-    $category = ServiceCategory::factory()->create();
     $service = Service::factory()->create([
-        'service_category_id' => $category->id,
         'name' => 'Service With Icon',
         'icon' => 'service_icons/old_icon.png',
     ]);
@@ -176,29 +158,25 @@ test('service update validates input', function () {
     $admin = User::factory()->admin()->create();
     $token = Auth::guard('admin')->login($admin);
 
-    $category = ServiceCategory::factory()->create();
-    $service = Service::factory()->create(['service_category_id' => $category->id]);
+    $service = Service::factory()->create();
 
     $invalidFile = UploadedFile::fake()->create('document.pdf', 100);
 
     $response = $this->withHeader('Authorization', "Bearer {$token}")
         ->postJson("/api/admin/services/{$service->id}", [
             '_method' => 'PUT',
-            'service_category_id' => 999999, // non-existent category
             'icon' => $invalidFile, // pdf not allowed for icon
         ]);
 
     $response->assertStatus(422)
-        ->assertJsonValidationErrors(['service_category_id', 'icon']);
+        ->assertJsonValidationErrors(['icon']);
 });
 
 test('admin can view a service', function () {
     $admin = User::factory()->admin()->create();
     $token = Auth::guard('admin')->login($admin);
 
-    $category = ServiceCategory::factory()->create(['name' => 'Cardiology']);
     $service = Service::factory()->create([
-        'service_category_id' => $category->id,
         'name' => 'Consultation',
     ]);
 
@@ -209,9 +187,6 @@ test('admin can view a service', function () {
         ->assertJson([
             'id' => $service->id,
             'name' => 'Consultation',
-            'service_category' => [
-                'id' => $category->id,
-            ],
         ]);
 });
 
@@ -221,9 +196,7 @@ test('admin can delete a service', function () {
     $admin = User::factory()->admin()->create();
     $token = Auth::guard('admin')->login($admin);
 
-    $category = ServiceCategory::factory()->create();
     $service = Service::factory()->create([
-        'service_category_id' => $category->id,
         'icon' => 'service_icons/to_delete.png',
     ]);
 
