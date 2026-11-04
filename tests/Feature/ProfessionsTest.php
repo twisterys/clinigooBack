@@ -5,7 +5,9 @@ use App\Models\ProfessionDocument;
 use App\Models\Service;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Storage;
 
 uses(RefreshDatabase::class);
 
@@ -263,6 +265,69 @@ test('admin can update profession and sync its services and documents', function
         'profession_document_id' => $doc2->id,
         'required' => true,
     ]);
+});
+
+test('admin can create a profession with an icon', function () {
+    Storage::fake('public');
+
+    $admin = User::factory()->admin()->create();
+    $token = Auth::guard('admin')->login($admin);
+
+    $response = $this->withHeader('Authorization', "Bearer {$token}")
+        ->postJson('/api/admin/professions', [
+            'name' => 'Infirmier',
+            'icon' => UploadedFile::fake()->image('icon.png'),
+        ]);
+
+    $response->assertStatus(201)
+        ->assertJson(['name' => 'Infirmier']);
+
+    $profession = Profession::where('name', 'Infirmier')->firstOrFail();
+
+    expect($profession->icon)->not->toBeNull()
+        ->and(Storage::disk('public')->exists($profession->icon))->toBeTrue()
+        ->and($response->json('icon'))->toBe(asset('storage/'.$profession->icon));
+});
+
+test('admin can update a profession icon and the old file is removed', function () {
+    Storage::fake('public');
+
+    $admin = User::factory()->admin()->create();
+    $token = Auth::guard('admin')->login($admin);
+
+    $profession = Profession::factory()->create([
+        'icon' => 'profession_icons/old_icon.png',
+    ]);
+
+    Storage::disk('public')->put('profession_icons/old_icon.png', 'fake old icon content');
+
+    $response = $this->withHeader('Authorization', "Bearer {$token}")
+        ->postJson("/api/admin/professions/{$profession->id}", [
+            '_method' => 'PUT',
+            'icon' => UploadedFile::fake()->create('new_icon.svg', 10, 'image/svg+xml'),
+        ]);
+
+    $response->assertOk();
+
+    $profession->refresh();
+
+    expect($profession->icon)->not->toBe('profession_icons/old_icon.png')
+        ->and(Storage::disk('public')->exists($profession->icon))->toBeTrue()
+        ->and(Storage::disk('public')->exists('profession_icons/old_icon.png'))->toBeFalse();
+});
+
+test('profession icon rejects unsupported file types', function () {
+    $admin = User::factory()->admin()->create();
+    $token = Auth::guard('admin')->login($admin);
+
+    $response = $this->withHeader('Authorization', "Bearer {$token}")
+        ->postJson('/api/admin/professions', [
+            'name' => 'Infirmier',
+            'icon' => UploadedFile::fake()->create('icon.pdf', 100),
+        ]);
+
+    $response->assertStatus(422)
+        ->assertJsonValidationErrors(['icon']);
 });
 
 test('admin can delete a profession', function () {

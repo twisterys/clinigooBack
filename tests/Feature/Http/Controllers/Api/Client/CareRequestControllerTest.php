@@ -65,16 +65,11 @@ final class CareRequestControllerTest extends TestCase
             'serviceId' => $service->id,
             'beneficiaryId' => $beneficiary->id,
             'addressId' => $address->id,
+            'address' => null,
             'urgent' => false,
             'date' => '2026-10-15',
             'time' => '14:30',
-            'durationHours' => 3.5,
             'description' => 'Test care request description',
-            'perimeter' => 15,
-            'evaluation' => 4.5,
-            'gender' => 'female',
-            'certified' => true,
-            'free_mobility' => true,
             'documents' => [$file],
         ];
 
@@ -85,13 +80,10 @@ final class CareRequestControllerTest extends TestCase
         $response->assertJsonPath('beneficiary_id', $beneficiary->id);
         $response->assertJsonPath('address_id', $address->id);
         $response->assertJsonPath('urgent', false);
-        $response->assertJsonPath('duration_hours', 3.5);
+        $response->assertJsonPath('date', '2026-10-15');
+        $response->assertJsonPath('time', '14:30');
         $response->assertJsonPath('description', 'Test care request description');
-        $response->assertJsonPath('perimeter', 15);
-        $response->assertJsonPath('evaluation', 4.5);
-        $response->assertJsonPath('gender', 'female');
-        $response->assertJsonPath('certified', true);
-        $response->assertJsonPath('free_mobility', true);
+        $this->assertNotNull($response->json('reference'));
 
         $this->assertDatabaseHas('care_requests', [
             'user_id' => $this->user->id,
@@ -99,14 +91,41 @@ final class CareRequestControllerTest extends TestCase
             'beneficiary_id' => $beneficiary->id,
             'address_id' => $address->id,
             'urgent' => false,
-            'gender' => 'female',
-            'certified' => true,
-            'free_mobility' => true,
+            'date' => '2026-10-15',
+            'description' => 'Test care request description',
         ]);
 
         $this->assertDatabaseHas('care_request_documents', [
             'original_name' => 'medical_report.pdf',
         ]);
+    }
+
+    #[Test]
+    public function store_generates_unique_reference(): void
+    {
+        $beneficiary = Beneficiary::factory()->create(['user_id' => $this->user->id]);
+        $service = Service::factory()->create();
+        $address = Address::factory()->create(['user_id' => $this->user->id]);
+
+        $payload = [
+            'serviceId' => $service->id,
+            'beneficiaryId' => $beneficiary->id,
+            'addressId' => $address->id,
+            'urgent' => true,
+        ];
+
+        $response1 = $this->postJson(route('care-requests.store'), $payload);
+        $response2 = $this->postJson(route('care-requests.store'), $payload);
+
+        $response1->assertCreated();
+        $response2->assertCreated();
+
+        $ref1 = $response1->json('reference');
+        $ref2 = $response2->json('reference');
+
+        $this->assertNotEmpty($ref1);
+        $this->assertNotEmpty($ref2);
+        $this->assertNotEquals($ref1, $ref2);
     }
 
     #[Test]
@@ -125,13 +144,7 @@ final class CareRequestControllerTest extends TestCase
             'urgent' => true,
             'date' => null,
             'time' => null,
-            'durationHours' => 2.0,
             'description' => 'Current location request',
-            'perimeter' => 10,
-            'evaluation' => null,
-            'gender' => 'all',
-            'certified' => false,
-            'free_mobility' => false,
         ];
 
         $response = $this->postJson(route('care-requests.store'), $payload);
@@ -163,12 +176,7 @@ final class CareRequestControllerTest extends TestCase
             'urgent' => true,
             'date' => '2026-10-15',
             'time' => '14:30',
-            'durationHours' => 2.0,
             'description' => 'Urgent request',
-            'perimeter' => 10,
-            'gender' => 'all',
-            'certified' => false,
-            'free_mobility' => false,
         ];
 
         $response = $this->postJson(route('care-requests.store'), $payload);

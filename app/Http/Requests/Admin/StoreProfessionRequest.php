@@ -15,7 +15,7 @@ class StoreProfessionRequest extends FormRequest
             'name' => ['required'],
             'description' => ['nullable'],
             'slug' => ['nullable', 'string', 'max:255'],
-            'icon' => ['nullable', 'string', 'max:255'],
+            'icon' => ['nullable', 'file', 'mimes:png,svg,jpg,jpeg,webp', 'max:2048'],
             'is_active' => ['boolean'],
             'services' => ['nullable', 'array'],
             'services.*' => ['integer', 'exists:services,id'],

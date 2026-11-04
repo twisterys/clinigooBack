@@ -18,10 +18,9 @@ class ProfessionController extends Controller
 
         $formatted = $professions->map(fn (Profession $p) => $this->professionService->formatProfession($p))->values();
 
-        return response()->json([
-            'items' => $formatted,
-            'data' => $formatted,
-        ]);
+        return response()->json(
+            $formatted
+        );
     }
 
     public function show(Request $request, Profession|int|string $profession): JsonResponse

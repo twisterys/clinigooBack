@@ -72,7 +72,7 @@ class CareRequestService
             $data['user_id'] = $userId;
 
             if (empty($data['reference'])) {
-                $data['reference'] = 'CLG-'.rand(1000, 9999);
+                $data['reference'] = CareRequest::generateUniqueReference();
             }
 
             if (empty($data['uuid'])) {
@@ -113,8 +113,8 @@ class CareRequestService
      */
     public function update(CareRequest $careRequest, array $data): CareRequest
     {
-        if (isset($data['description'])) {
-            $data['notes'] = $data['description'];
+        if (isset($data['notes']) && ! isset($data['description'])) {
+            $data['description'] = $data['notes'];
         }
 
         $careRequest->update($data);

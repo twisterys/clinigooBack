@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Http\Requests\Admin\StoreServiceRequest;
 use App\Http\Requests\Admin\UpdateServiceRequest;
+use App\Models\Profession;
 use App\Models\Service;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Http\Request;
@@ -59,9 +60,31 @@ class ServiceService
     }
 
     /**
+     * Get active services belonging to a profession.
+     *
+     * @param  array<string, mixed>  $filters
+     * @return Collection<int, Service>
+     */
+    public function getServicesByProfession(Profession|int $profession, array $filters = []): Collection
+    {
+        $professionId = $profession instanceof Profession ? $profession->id : $profession;
+
+        $query = Service::query()
+            ->where('is_active', true)
+            ->whereHas('professions', fn ($query) => $query->where('professions.id', $professionId))
+            ->orderBy('sort_order');
+
+        if (! empty($filters['limit'])) {
+            $query->take($filters['limit']);
+        }
+
+        return $query->get();
+    }
+
+    /**
      * Format service for API response.
      */
-    public function formatService(Service $service, ?string $locale = null): array
+    public function formatService(Service $service): array
     {
         return [
             'id' => (string) $service->id,

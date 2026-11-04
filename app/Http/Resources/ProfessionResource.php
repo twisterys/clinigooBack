@@ -17,6 +17,8 @@ class ProfessionResource extends JsonResource
             'id' => $this->id,
             'name' => $this->name,
             'description' => $this->description,
+            'slug' => $this->slug,
+            'icon' => $this->icon ? asset('storage/'.$this->icon) : null,
             'is_active' => $this->is_active,
             'created_at' => $this->created_at,
             'updated_at' => $this->updated_at,

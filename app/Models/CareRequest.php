@@ -7,6 +7,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Support\Str;
 
 class CareRequest extends Model
 {
@@ -15,6 +16,31 @@ class CareRequest extends Model
     protected static function newFactory()
     {
         return CareRequestFactory::new();
+    }
+
+    protected static function booted(): void
+    {
+        static::creating(function (CareRequest $careRequest) {
+            if (empty($careRequest->uuid)) {
+                $careRequest->uuid = (string) Str::uuid();
+            }
+
+            if (empty($careRequest->reference)) {
+                $careRequest->reference = static::generateUniqueReference();
+            }
+        });
+    }
+
+    /**
+     * Generate a unique reference for a care request.
+     */
+    public static function generateUniqueReference(): string
+    {
+        do {
+            $reference = 'CLG-' . strtoupper(Str::random(8));
+        } while (static::where('reference', $reference)->exists());
+
+        return $reference;
     }
 
     /**
@@ -33,14 +59,7 @@ class CareRequest extends Model
         'date',
         'time',
         'scheduled_at',
-        'duration_hours',
         'description',
-        'notes',
-        'perimeter',
-        'evaluation',
-        'gender',
-        'certified',
-        'free_mobility',
         'status',
         'address_label',
         'address_line',
@@ -67,15 +86,18 @@ class CareRequest extends Model
             'urgent' => 'boolean',
             'date' => 'date:Y-m-d',
             'scheduled_at' => 'datetime',
-            'duration_hours' => 'float',
-            'perimeter' => 'integer',
-            'evaluation' => 'float',
-            'certified' => 'boolean',
-            'free_mobility' => 'boolean',
             'latitude' => 'decimal:7',
             'longitude' => 'decimal:7',
             'cancelled_at' => 'datetime',
         ];
+    }
+
+    /**
+     * Backward-compatibility accessor for notes.
+     */
+    public function getNotesAttribute(): ?string
+    {
+        return $this->description;
     }
 
     public function user(): BelongsTo

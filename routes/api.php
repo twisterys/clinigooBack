@@ -146,6 +146,7 @@ Route::group(['prefix' => 'public'], function () {
 // Authenticated Client Routes
 Route::middleware('auth:api')->group(function () {
     Route::get('services/recent', [ClientServiceController::class, 'recent']);
+    Route::get('services/profession/{profession}', [ClientServiceController::class, 'byProfession']);
     Route::apiResource('services', ClientServiceController::class)->only('index', 'show');
     Route::apiResource('addresses', AddressController::class);
     Route::apiResource('beneficiaries', BeneficiaryController::class);

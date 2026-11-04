@@ -24,7 +24,7 @@ class ProfessionController extends Controller
     {
         $profession = $this->professionService->store($request->validated());
 
-        return response()->json($profession, 201);
+        return response()->json(new ProfessionResource($profession), 201);
     }
 
     public function show(Profession|int|string $profession): JsonResponse

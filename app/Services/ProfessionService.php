@@ -5,6 +5,8 @@ namespace App\Services;
 use App\Http\Resources\ProfessionResource;
 use App\Models\Profession;
 use Illuminate\Database\Eloquent\Collection;
+use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Yajra\DataTables\Facades\DataTables;
 
@@ -33,6 +35,8 @@ class ProfessionService
                             ->orWhere('slug', 'like', "%{$search}%");
                     });
                 }
+            })->editColumn('icon', function ($profession) {
+                return $profession->icon ? asset('storage/'.$profession->icon) : null;
             })->addColumn('documents', function ($profession) {
                 return $profession->documents->map(function ($doc) {
                     return [
@@ -73,6 +77,10 @@ class ProfessionService
             $data['slug'] = Str::slug($data['name']);
         }
 
+        if (($data['icon'] ?? null) instanceof UploadedFile) {
+            $data['icon'] = $data['icon']->store('profession_icons', 'public');
+        }
+
         $profession = Profession::create(collect($data)->except(['services', 'service_ids', 'documents'])->toArray());
 
         if (isset($data['services'])) {
@@ -98,6 +106,20 @@ class ProfessionService
             $data['slug'] = Str::slug($data['name']);
         }
 
+        if (($data['icon'] ?? null) instanceof UploadedFile) {
+            if ($profession->icon && Storage::disk('public')->exists($profession->icon)) {
+                Storage::disk('public')->delete($profession->icon);
+            }
+
+            $data['icon'] = $data['icon']->store('profession_icons', 'public');
+        } elseif (array_key_exists('icon', $data) && $data['icon'] === null) {
+            if ($profession->icon && Storage::disk('public')->exists($profession->icon)) {
+                Storage::disk('public')->delete($profession->icon);
+            }
+        } else {
+            unset($data['icon']);
+        }
+
         $profession->update(collect($data)->except(['services', 'service_ids', 'documents'])->toArray());
 
         if (isset($data['services'])) {
@@ -117,6 +139,10 @@ class ProfessionService
      */
     public function delete(Profession $profession): bool
     {
+        if ($profession->icon && Storage::disk('public')->exists($profession->icon)) {
+            Storage::disk('public')->delete($profession->icon);
+        }
+
         return (bool) $profession->delete();
     }
 
@@ -166,7 +192,7 @@ class ProfessionService
      *
      * @return array<string, mixed>
      */
-    public function formatProfession(Profession $profession, ?string $locale = null): array
+    public function formatProfession(Profession $profession): array
     {
         $services = $profession->relationLoaded('services')
             ? $profession->services->map(fn ($service) => [
@@ -178,26 +204,14 @@ class ProfessionService
             ])->values()->all()
             : [];
 
-        $documents = $profession->relationLoaded('documents')
-            ? $profession->documents->map(fn ($doc) => [
-                'id' => $doc->id,
-                'name' => $doc->name,
-                'description' => $doc->description,
-                'formats' => $doc->formats ?? ['pdf', 'jpg', 'jpeg', 'png'],
-                'enabled_formats' => $doc->enabled_formats ?? ['pdf', 'jpg', 'jpeg', 'png'],
-                'required' => (bool) ($doc->pivot->required ?? true),
-            ])->values()->all()
-            : [];
-
         return [
             'id' => $profession->id,
             'name' => $profession->name,
             'description' => $profession->description,
             'slug' => $profession->slug,
-            'icon' => $profession->icon,
+            'icon' => $profession->icon ? asset('storage/'.$profession->icon) : null,
             'is_active' => (bool) $profession->is_active,
             'services' => $services,
-            'documents' => $documents,
         ];
     }
 }

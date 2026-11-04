@@ -7,10 +7,12 @@ use App\Http\Controllers\Controller;
 use App\Models\PatientProfile;
 use App\Models\ProfessionalProfile;
 use App\Models\User;
+use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\Rule;
 
 class AuthController extends Controller
@@ -20,6 +22,7 @@ class AuthController extends Controller
      */
     public function register(Request $request): JsonResponse
     {
+        Log::channel('daily')->info('User registration attempt.', ['request' => $request->all()]);
         $validated = $request->validate([
             'email' => ['required', 'email', 'unique:users,email'],
             'password' => ['required', 'min:8'],
@@ -29,9 +32,10 @@ class AuthController extends Controller
             'lastName' => ['nullable', 'string'],
             'sexe' => ['nullable', 'string'],
 
-            'birthDay' => ['nullable', 'date'],
+            'date_of_birth' => ['nullable', 'date'],
             'phone' => ['nullable', 'string'],
             'profile_email' => ['nullable', 'email'],
+            'target' => ['nullable', 'string'],
 
             // Professional Profile fields
             'id_number' => ['nullable', 'string'],
@@ -43,13 +47,12 @@ class AuthController extends Controller
         ]);
 
         $firstName = $validated['firstName'] ?? null;
-        $lastName =  $validated['lastName'] ?? null;
-
+        $lastName = $validated['lastName'] ?? null;
 
         $type = isset($validated['type']) ? UserType::from($validated['type']) : UserType::Patient;
 
         $user = User::create([
-            'name' => $validated['firstName'] . ' ' . $validated['lastName'],
+            'name' => $validated['firstName'].' '.$validated['lastName'],
             'email' => $validated['email'],
             'type' => $type,
             'password' => Hash::make($validated['password']),
@@ -60,11 +63,23 @@ class AuthController extends Controller
             $user->patientProfile()->create([
                 'first_name' => $firstName ?? '',
                 'last_name' => $lastName ?? '',
-                'birthday' => $validated['birthDay'] ?? null,
+                'birthday' => $validated['date_of_birth'] ? Carbon::createFromFormat('Y-m-d', $validated['date_of_birth'])->toDateString() : null,
                 'sexe' => $validated['sexe'] ?? null,
                 'phone' => $validated['phone'] ?? null,
                 'email' => $validated['profile_email'] ?? $validated['email'],
             ]);
+            if ($request->input('target') === 'myself') {
+                $user->beneficiaries()->create([
+                    'first_name' => $firstName,
+                    'last_name' => $lastName,
+                    'date_of_birth' => $validated['date_of_birth'] ? Carbon::createFromFormat('Y-m-d', $validated['date_of_birth'])->toDateString() : null,
+                    'gender' => $validated['sexe'] ?? null,
+                    'phone' => $validated['phone'] ?? null,
+                    'relationship' => 'Self',
+                    'is_default' => true,
+                ]);
+            }
+
         } elseif ($user->isProfessional()) {
             $proId = $validated['id_number'] ?? $validated['ID'] ?? $validated['professional_id'] ?? null;
             /** @var ProfessionalProfile $proProfile */
@@ -97,7 +112,7 @@ class AuthController extends Controller
         ]);
 
         if (! $token = Auth::guard('api')->attempt($credentials)) {
-            return response()->json(['error' => 'Unauthorized'], 401);
+            return response()->json(['error' => 'Invalid email or password.'], 401);
         }
 
         return $this->respondWithToken((string) $token);

@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api\Client;
 
 use App\Http\Controllers\Controller;
+use App\Models\Profession;
 use App\Models\Service;
 use App\Services\ServiceService;
 use Illuminate\Http\JsonResponse;
@@ -14,14 +15,12 @@ class ServiceController extends Controller
 
     public function index(Request $request): JsonResponse
     {
-        $locale = $this->getLocale($request);
-
         $filters = [
             'recent' => $request->boolean('recent'),
         ];
 
         $services = $this->serviceService->getServices($filters)
-            ->map(fn ($s) => $this->serviceService->formatService($s, $locale));
+            ->map(fn ($s) => $this->serviceService->formatService($s));
 
         return response()->json([
             'items' => $services,
@@ -31,10 +30,8 @@ class ServiceController extends Controller
 
     public function recent(Request $request): JsonResponse
     {
-        $locale = $this->getLocale($request);
-
         $services = $this->serviceService->getServices(['recent' => true, 'limit' => 6])
-            ->map(fn ($s) => $this->serviceService->formatService($s, $locale));
+            ->map(fn ($s) => $this->serviceService->formatService($s));
 
         return response()->json([
             'items' => $services,
@@ -44,15 +41,26 @@ class ServiceController extends Controller
 
     public function show(Request $request, Service $service): JsonResponse
     {
-        $locale = $this->getLocale($request);
-
-        return response()->json($this->serviceService->formatService($service, $locale));
+        return response()->json($this->serviceService->formatService($service));
     }
 
-    protected function getLocale(Request $request): string
+    public function byProfession(Request $request, Profession|int|string $profession): JsonResponse
     {
-        $locale = $request->header('Accept-Language') ?? $request->input('lang') ?? app()->getLocale();
+        if (! $profession instanceof Profession) {
+            $profession = Profession::findOrFail($profession);
+        }
 
-        return strlen($locale) > 2 ? substr($locale, 0, 2) : $locale;
+        $services = $this->serviceService->getServicesByProfession($profession)
+            ->map(fn ($s) => $this->serviceService->formatService($s));
+
+        return response()->json([
+            'profession' => [
+                'id' => $profession->id,
+                'name' => $profession->name,
+                'slug' => $profession->slug,
+            ],
+            'items' => $services,
+            'data' => $services,
+        ]);
     }
 }

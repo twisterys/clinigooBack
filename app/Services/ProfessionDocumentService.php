@@ -89,7 +89,7 @@ class ProfessionDocumentService
      *
      * @return array<string, mixed>
      */
-    public function formatDocument(ProfessionDocument $document, ?string $locale = null): array
+    public function formatDocument(ProfessionDocument $document): array
     {
         return [
             'id' => $document->id,
