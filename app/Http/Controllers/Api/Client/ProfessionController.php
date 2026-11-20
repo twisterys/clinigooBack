@@ -14,9 +14,7 @@ class ProfessionController extends Controller
 
     public function index(Request $request): JsonResponse
     {
-        $professions = $this->professionService->getAll($request->all());
-
-        $formatted = $professions->map(fn (Profession $p) => $this->professionService->formatProfession($p))->values();
+        $formatted = $this->professionService->getAll($request->all())->values();
 
         return response()->json([
             'items' => $formatted,
@@ -26,21 +24,15 @@ class ProfessionController extends Controller
 
     public function show(Request $request, Profession|int|string $profession): JsonResponse
     {
-        if (! $profession instanceof Profession) {
-            $profession = Profession::findOrFail($profession);
-        }
-
-        $profession->load(['services', 'documents']);
-
-        return response()->json($this->professionService->formatProfession($profession));
+        return response()->json(
+            $this->professionService->getByIdentifier($profession)
+        );
     }
 
     public function getProfessionServices(Request $request, int|string $professionId): JsonResponse
     {
-        $profession = Profession::with('services')->findOrFail($professionId);
-
         return response()->json([
-            'data' => $profession->services,
+            'data' => $this->professionService->getServicesForProfession($professionId),
         ]);
     }
 }

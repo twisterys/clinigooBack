@@ -2,64 +2,225 @@
 
 namespace App\Services;
 
+use App\Enums\HealthcareProfession;
 use App\Http\Resources\ProfessionResource;
 use App\Models\Profession;
-use Illuminate\Database\Eloquent\Collection;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Str;
 use Yajra\DataTables\Facades\DataTables;
 
 class ProfessionService
 {
     /**
-     * Get DataTables response for professions.
+     * Get DataTables response for professions sourced from HealthcareProfession enum.
      *
      * @param  array<string, mixed>  $filters
      */
     public function dataTable(array $filters = []): mixed
     {
-        $query = Profession::with(['services', 'documents']);
+        $professions = $this->getAll($filters);
 
-        if (isset($filters['is_active'])) {
-            $query->where('is_active', (bool) $filters['is_active']);
-        }
-
-        return DataTables::of($query)
-            ->filter(function ($query) use ($filters) {
-                if (! empty($filters['search'])) {
-                    $search = $filters['search'];
-                    $query->where(function ($q) use ($search) {
-                        $q->where('name', 'like', "%{$search}%")
-                            ->orWhere('description', 'like', "%{$search}%")
-                            ->orWhere('slug', 'like', "%{$search}%");
-                    });
-                }
-            })->addColumn('documents', function ($profession) {
-                return $profession->documents->map(function ($doc) {
-                    return [
-                        'id' => $doc->id,
-                        'name' => $doc->name,
-                        'required' => (bool) ($doc->pivot->required ?? true),
-                    ];
-                })->values()->toArray();
-            })->make();
+        return DataTables::of($professions)->make(true);
     }
 
     /**
-     * Get active professions for clients.
+     * Get all fixed healthcare professions from the HealthcareProfession enum.
      *
      * @param  array<string, mixed>  $filters
-     * @return Collection<int, Profession>
+     * @return Collection<int, array<string, mixed>>
      */
     public function getAll(array $filters = []): Collection
     {
-        $query = Profession::with(['services', 'documents'])->where('is_active', true);
+        $dbProfessionsBySlug = Profession::with(['services', 'documents'])
+            ->whereIn('slug', HealthcareProfession::values())
+            ->get()
+            ->keyBy('slug');
 
-        if (! empty($filters['search'])) {
-            $search = $filters['search'];
-            $query->where('name', 'like', "%{$search}%");
+        $professions = collect(HealthcareProfession::cases())
+            ->map(fn (HealthcareProfession $enum) => $this->formatEnumProfession(
+                $enum,
+                $dbProfessionsBySlug->get($enum->value),
+            ));
+
+        $search = $this->extractSearchFilter($filters);
+        if ($search !== '') {
+            $needle = mb_strtolower($search);
+            $professions = $professions->filter(function (array $item) use ($needle): bool {
+                $haystack = mb_strtolower(implode(' ', [
+                    (string) ($item['name'] ?? ''),
+                    (string) ($item['description'] ?? ''),
+                    (string) ($item['slug'] ?? ''),
+                    (string) ($item['category']['name'] ?? ''),
+                ]));
+
+                return str_contains($haystack, $needle);
+            });
         }
 
-        return $query->get();
+        return $professions->values();
+    }
+
+    /**
+     * Resolve a HealthcareProfession enum from a slug, label, enum name, 1-based index, or DB Profession.
+     */
+    public function resolveEnum(Profession|int|string $profession): ?HealthcareProfession
+    {
+        if ($profession instanceof Profession) {
+            return HealthcareProfession::fromInput($profession->slug ?? $profession->name ?? $profession->id);
+        }
+
+        $enum = HealthcareProfession::fromInput($profession);
+        if ($enum !== null) {
+            return $enum;
+        }
+
+        if (is_numeric($profession)) {
+            $dbProfession = Profession::find((int) $profession);
+            if ($dbProfession !== null) {
+                return HealthcareProfession::fromInput($dbProfession->slug ?? $dbProfession->name);
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Get a single formatted profession from the HealthcareProfession enum.
+     *
+     * @return array<string, mixed>
+     */
+    public function getByIdentifier(Profession|int|string $profession): array
+    {
+        $enum = $this->resolveEnum($profession);
+
+        if ($enum === null) {
+            abort(404, 'Profession introuvable.');
+        }
+
+        $dbProfession = Profession::with(['services', 'documents'])
+            ->where('slug', $enum->value)
+            ->first();
+
+        return $this->formatEnumProfession($enum, $dbProfession);
+    }
+
+    /**
+     * Get services associated with a profession resolved from HealthcareProfession enum.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    public function getServicesForProfession(Profession|int|string $profession): array
+    {
+        $enum = $this->resolveEnum($profession);
+
+        if ($enum === null) {
+            abort(404, 'Profession introuvable.');
+        }
+
+        $dbProfession = Profession::with('services')
+            ->where('slug', $enum->value)
+            ->first();
+
+        if (! $dbProfession) {
+            return [];
+        }
+
+        return $dbProfession->services->map(fn ($service) => [
+            'id' => $service->id,
+            'name' => $service->name,
+            'description' => $service->description,
+            'icon' => $service->icon ?? '',
+            'base_price' => (float) ($service->base_price ?? 0),
+            'duration_minutes' => $service->duration_minutes,
+        ])->values()->all();
+    }
+
+    /**
+     * Sync document requirements for an enum-defined profession and return the formatted payload.
+     *
+     * @param  array<mixed>  $documents
+     * @return array<string, mixed>
+     */
+    public function syncDocumentsForEnum(HealthcareProfession $enum, array $documents): array
+    {
+        $dbProfession = Profession::firstOrCreate(
+            ['slug' => $enum->value],
+            [
+                'name' => $enum->label(),
+                'description' => $enum->category()->description(),
+                'icon' => $enum->icon(),
+                'is_active' => true,
+            ]
+        );
+
+        $this->syncDocuments($dbProfession, $documents);
+        $dbProfession->load(['services', 'documents']);
+
+        return $this->formatEnumProfession($enum, $dbProfession);
+    }
+
+    /**
+     * Format a HealthcareProfession enum case for API responses.
+     *
+     * @return array<string, mixed>
+     */
+    public function formatEnumProfession(HealthcareProfession $enum, ?Profession $dbProfession = null): array
+    {
+        $services = $dbProfession && $dbProfession->relationLoaded('services')
+            ? $dbProfession->services->map(fn ($service) => [
+                'id' => $service->id,
+                'name' => $service->name,
+                'description' => $service->description,
+                'icon' => $service->icon ?? '',
+                'base_price' => (float) ($service->base_price ?? 0),
+                'duration_minutes' => $service->duration_minutes,
+            ])->values()->all()
+            : [];
+
+        $documents = $dbProfession && $dbProfession->relationLoaded('documents')
+            ? $dbProfession->documents->map(fn ($doc) => [
+                'id' => $doc->id,
+                'name' => $doc->name,
+                'description' => $doc->description,
+                'formats' => $doc->formats ?? ['pdf', 'jpg', 'jpeg', 'png'],
+                'enabled_formats' => $doc->enabled_formats ?? ['pdf', 'jpg', 'jpeg', 'png'],
+                'required' => (bool) ($doc->pivot->required ?? true),
+            ])->values()->all()
+            : [];
+
+        return [
+            'id' => $enum->value,
+            'key' => $enum->value,
+            'value' => $enum->value,
+            'slug' => $enum->value,
+            'name' => $enum->label(),
+            'label' => $enum->label(),
+            'description' => $enum->category()->description(),
+            'icon' => $enum->icon(),
+            'category' => [
+                'id' => $enum->category()->value,
+                'name' => $enum->category()->label(),
+            ],
+            'is_active' => true,
+            'catalog_services' => $enum->catalogServices(),
+            'services' => $services,
+            'documents' => $documents,
+        ];
+    }
+
+    /**
+     * Extract a plain search string from request/DataTables filters.
+     *
+     * @param  array<string, mixed>  $filters
+     */
+    protected function extractSearchFilter(array $filters): string
+    {
+        $search = $filters['search'] ?? '';
+        if (is_array($search)) {
+            $search = $search['value'] ?? '';
+        }
+
+        return is_string($search) ? trim($search) : '';
     }
 
     /**

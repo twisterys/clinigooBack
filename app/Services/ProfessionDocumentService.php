@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Enums\HealthcareProfession;
 use App\Models\Profession;
 use App\Models\ProfessionDocument;
 use Illuminate\Database\Eloquent\Collection;
@@ -104,7 +105,11 @@ class ProfessionDocumentService
 
     public function getDocumentsByProfession($professionId)
     {
-        $profession = Profession::with('documents')->find($professionId);
+        $enum = HealthcareProfession::fromInput($professionId);
+        $profession = $enum
+            ? Profession::with('documents')->where('slug', $enum->value)->first()
+            : Profession::with('documents')->find($professionId);
+
         if ($profession) {
             return $profession->documents;
         }

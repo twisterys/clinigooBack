@@ -3,9 +3,6 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
-use App\Http\Requests\Admin\StoreProfessionRequest;
-use App\Http\Requests\Admin\UpdateProfessionRequest;
-use App\Http\Resources\ProfessionResource;
 use App\Models\Profession;
 use App\Services\ProfessionService;
 use Illuminate\Http\JsonResponse;
@@ -29,30 +26,22 @@ class ProfessionController extends Controller
 
     public function show(Profession|int|string $profession): JsonResponse
     {
-        if (! $profession instanceof Profession) {
-            $profession = Profession::where('slug', $profession)
-                ->orWhere('id', $profession)
-                ->firstOrFail();
-        }
-
-        $profession->load(['services', 'documents']);
-
-        return response()->json(new ProfessionResource($profession));
+        return response()->json(
+            $this->professionService->getByIdentifier($profession)
+        );
     }
 
     public function update(Request $request, Profession|int|string $profession): JsonResponse
     {
-        if (! $profession instanceof Profession) {
-            $profession = Profession::where('slug', $profession)
-                ->orWhere('id', $profession)
-                ->firstOrFail();
-        }
-
         if ($request->has('documents')) {
-            $this->professionService->syncDocuments($profession, (array) $request->input('documents'));
-            $profession->load(['services', 'documents']);
+            $enum = $this->professionService->resolveEnum($profession);
+            if ($enum === null) {
+                abort(404, 'Profession introuvable.');
+            }
 
-            return response()->json(new ProfessionResource($profession));
+            return response()->json(
+                $this->professionService->syncDocumentsForEnum($enum, (array) $request->input('documents'))
+            );
         }
 
         return response()->json([
@@ -62,17 +51,16 @@ class ProfessionController extends Controller
 
     public function updateDocuments(Request $request, Profession|int|string $profession): JsonResponse
     {
-        if (! $profession instanceof Profession) {
-            $profession = Profession::where('slug', $profession)
-                ->orWhere('id', $profession)
-                ->firstOrFail();
+        $enum = $this->professionService->resolveEnum($profession);
+        if ($enum === null) {
+            abort(404, 'Profession introuvable.');
         }
 
         $documents = $request->input('documents', []);
-        $this->professionService->syncDocuments($profession, (array) $documents);
-        $profession->load(['services', 'documents']);
 
-        return response()->json(new ProfessionResource($profession));
+        return response()->json(
+            $this->professionService->syncDocumentsForEnum($enum, (array) $documents)
+        );
     }
 
     public function destroy(Profession|int|string $profession): JsonResponse

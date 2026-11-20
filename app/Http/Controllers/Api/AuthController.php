@@ -2,9 +2,11 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Enums\HealthcareProfession;
 use App\Enums\UserType;
 use App\Http\Controllers\Controller;
 use App\Models\PatientProfile;
+use App\Models\Profession;
 use App\Models\ProfessionalProfile;
 use App\Models\User;
 use Illuminate\Http\JsonResponse;
@@ -12,6 +14,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 
 class AuthController extends Controller
 {
@@ -25,35 +28,57 @@ class AuthController extends Controller
             'password' => ['required', 'min:8'],
             'role' => ['nullable', 'string', Rule::in(UserType::values())],
             'type' => ['nullable', 'string', Rule::in(UserType::values())],
-            'profession' => ['nullable', 'string'],
+            'profession' => ['nullable'],
 
             'first_name' => ['nullable', 'string'],
             'last_name' => ['nullable', 'string'],
             'firstName' => ['nullable', 'string'],
             'lastName' => ['nullable', 'string'],
             'sexe' => ['nullable', 'string'],
+            'gender' => ['nullable', 'string'],
 
             'birthDay' => ['nullable', 'date'],
             'birthday' => ['nullable', 'date'],
+            'date_of_birth' => ['nullable', 'date'],
             'phone' => ['nullable', 'string'],
+            'city' => ['nullable', 'string'],
             'profile_email' => ['nullable', 'email'],
 
             // Professional Profile fields
             'id_number' => ['nullable', 'string'],
             'ID' => ['nullable', 'string'],
             'professional_id' => ['nullable', 'string'],
-            'profession_id' => ['nullable', 'integer', 'exists:professions,id'],
+            'profession_id' => ['nullable'],
             'services' => ['nullable', 'array'],
             'services.*' => ['integer', 'exists:services,id'],
         ]);
 
         $firstName = $validated['firstName'] ?? $validated['first_name'] ?? '';
-        $lastName =  $validated['lastName'] ?? $validated['last_name'] ?? '';
+        $lastName = $validated['lastName'] ?? $validated['last_name'] ?? '';
         $fullName = trim("{$firstName} {$lastName}") ?: $validated['email'];
 
         $rawType = $validated['type'] ?? $validated['role'] ?? null;
         $type = $rawType ? UserType::from($rawType) : UserType::Patient;
-        $profession = $validated['profession'] ?? null;
+
+        $rawProfession = $validated['profession'] ?? $validated['profession_id'] ?? null;
+        $professionEnum = null;
+        $professionId = null;
+
+        if ($rawProfession !== null && $rawProfession !== '') {
+            $professionEnum = HealthcareProfession::fromInput($rawProfession);
+            if ($professionEnum === null) {
+                throw ValidationException::withMessages([
+                    'profession_id' => ['Veuillez sélectionner une des 6 professions de santé autorisées.'],
+                ]);
+            }
+
+            $professionModel = Profession::where('slug', $professionEnum->value)->first();
+            $professionId = $professionModel?->id;
+        }
+
+        $profession = $professionEnum?->value;
+        $sexe = $validated['sexe'] ?? $validated['gender'] ?? null;
+        $birthday = $validated['birthday'] ?? $validated['birthDay'] ?? $validated['date_of_birth'] ?? null;
 
         $user = User::create([
             'name' => $fullName,
@@ -68,8 +93,8 @@ class AuthController extends Controller
             $user->patientProfile()->create([
                 'first_name' => $firstName ?? '',
                 'last_name' => $lastName ?? '',
-                'birthday' => $validated['birthday'] ?? $validated['birthDay'] ?? null,
-                'sexe' => $validated['sexe'] ?? null,
+                'birthday' => $birthday,
+                'sexe' => $sexe,
                 'phone' => $validated['phone'] ?? null,
                 'email' => $validated['profile_email'] ?? $validated['email'],
             ]);
@@ -79,9 +104,12 @@ class AuthController extends Controller
             $proProfile = $user->professionalProfile()->create([
                 'first_name' => $firstName ?? '',
                 'last_name' => $lastName ?? '',
-                'sexe' => $validated['sexe'] ?? null,
+                'sexe' => $sexe,
+                'birthday' => $birthday,
+                'phone' => $validated['phone'] ?? null,
+                'city' => $validated['city'] ?? null,
                 'id_number' => $proId,
-                'profession_id' => $validated['profession_id'] ?? null,
+                'profession_id' => $professionId,
             ]);
 
             if (isset($validated['services']) && is_array($validated['services'])) {

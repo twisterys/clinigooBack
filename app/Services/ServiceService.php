@@ -137,8 +137,23 @@ class ServiceService
             $rawArray = is_array($raw) ? $raw : [$raw];
             $resolvedIds = [];
             foreach ($rawArray as $item) {
-                if (is_numeric($item)) {
-                    $resolvedIds[] = (int) $item;
+                $enum = \App\Enums\HealthcareProfession::fromInput($item);
+                if ($enum !== null) {
+                    $prof = \App\Models\Profession::firstOrCreate(
+                        ['slug' => $enum->value],
+                        [
+                            'name' => $enum->label(),
+                            'description' => $enum->category()->description(),
+                            'icon' => $enum->icon(),
+                            'is_active' => true,
+                        ]
+                    );
+                    $resolvedIds[] = $prof->id;
+                } elseif (is_numeric($item)) {
+                    $existing = \App\Models\Profession::find((int) $item);
+                    if ($existing) {
+                        $resolvedIds[] = $existing->id;
+                    }
                 } elseif (is_string($item) && ! empty($item)) {
                     $prof = \App\Models\Profession::where('slug', $item)->first();
                     if ($prof) {

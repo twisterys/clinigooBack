@@ -71,13 +71,15 @@ class ProfessionalController extends Controller
         $validated = $request->validate([
             'decision' => ['required', 'string', 'in:validate,reject'],
             'reason' => ['nullable', 'string', 'required_if:decision,reject'],
+            'allow_reupload' => ['nullable', 'boolean'],
         ]);
 
         $updatedDoc = $this->profileService->adminVerifyDocument(
             $document,
             $validated['decision'],
             $validated['reason'] ?? null,
-            $this->getAdminUser()
+            $this->getAdminUser(),
+            (bool) ($validated['allow_reupload'] ?? false)
         );
 
         return response()->json([
@@ -88,6 +90,34 @@ class ProfessionalController extends Controller
                 'id' => $updatedDoc->id,
                 'status' => $updatedDoc->status->value,
                 'rejection_reason' => $updatedDoc->rejection_reason,
+                'reupload_allowed' => (bool) $updatedDoc->reupload_allowed,
+                'verified_at' => $updatedDoc->verified_at?->toIso8601String(),
+            ],
+            'profile' => $this->profileService->getDossier($profile->fresh()),
+        ]);
+    }
+
+    /**
+     * Allow a professional to re-upload a rejected required document.
+     */
+    public function allowDocumentReupload(int $profileId, int $documentId): JsonResponse
+    {
+        $profile = ProfessionalProfile::findOrFail($profileId);
+        /** @var ProfessionalDocument $document */
+        $document = $profile->documents()->findOrFail($documentId);
+
+        $updatedDoc = $this->profileService->adminAllowDocumentReupload(
+            $document,
+            $this->getAdminUser()
+        );
+
+        return response()->json([
+            'message' => 'Le re-téléversement du document a été autorisé.',
+            'document' => [
+                'id' => $updatedDoc->id,
+                'status' => $updatedDoc->status->value,
+                'rejection_reason' => $updatedDoc->rejection_reason,
+                'reupload_allowed' => (bool) $updatedDoc->reupload_allowed,
                 'verified_at' => $updatedDoc->verified_at?->toIso8601String(),
             ],
             'profile' => $this->profileService->getDossier($profile->fresh()),

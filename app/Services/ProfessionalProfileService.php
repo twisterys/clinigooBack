@@ -23,12 +23,40 @@ use Illuminate\Validation\ValidationException;
 class ProfessionalProfileService
 {
     /**
+     * Resolve the DB Profession record for a profile (falling back to user's HealthcareProfession enum slug).
+     */
+    protected function resolveProfessionModel(ProfessionalProfile $profile): ?Profession
+    {
+        $profile->loadMissing(['user', 'profession']);
+
+        if ($profile->profession) {
+            return $profile->profession;
+        }
+
+        $profEnum = HealthcareProfession::fromInput($profile->user?->profession);
+        if (! $profEnum) {
+            return null;
+        }
+
+        $profession = Profession::where('slug', $profEnum->value)->first();
+        if ($profession && ! $profile->profession_id) {
+            $profile->profession_id = $profession->id;
+            $profile->save();
+            $profile->setRelation('profession', $profession);
+        }
+
+        return $profession;
+    }
+
+    /**
      * Get the full dossier for a professional profile.
      *
      * @return array<string, mixed>
      */
     public function getDossier(ProfessionalProfile $profile): array
     {
+        $profession = $this->resolveProfessionModel($profile);
+
         $profile->loadMissing([
             'user',
             'profession.services',
@@ -38,10 +66,9 @@ class ProfessionalProfileService
             'decisionHistories.admin',
         ]);
 
-        $profession = $profile->profession;
-        $requiredDocIds = $profession
-            ? $profession->documents()->wherePivot('required', true)->pluck('profession_documents.id')->all()
-            : [];
+        if ($profession) {
+            $profession->loadMissing(['services', 'documents']);
+        }
 
         $uploadedDocs = $profile->documents->keyBy('profession_document_id');
 
@@ -64,12 +91,13 @@ class ProfessionalProfileService
                         'url' => $uploaded->url,
                         'status' => $uploaded->status->value,
                         'rejection_reason' => $uploaded->rejection_reason,
+                        'reupload_allowed' => (bool) $uploaded->reupload_allowed,
                     ] : null,
                 ];
             }
         }
 
-        $profEnum = HealthcareProfession::fromInput($profile->profession ?? $profile->user->profession ?? $profession?->slug);
+        $profEnum = HealthcareProfession::fromInput($profile->user->profession ?? $profession?->slug);
 
         return [
             'id' => $profile->id,
@@ -96,6 +124,7 @@ class ProfessionalProfileService
             'is_available' => (bool) $profile->is_available,
             'is_validated' => $profile->isValidated(),
             'is_eligible' => $profile->isEligible(),
+            'created_at' => $profile->created_at?->toIso8601String(),
             'submitted_at' => $profile->submitted_at?->toIso8601String(),
             'validated_at' => $profile->validated_at?->toIso8601String(),
             'profession' => $profession ? [
@@ -129,6 +158,7 @@ class ProfessionalProfileService
                 'file_size' => $d->file_size,
                 'status' => $d->status->value,
                 'rejection_reason' => $d->rejection_reason,
+                'reupload_allowed' => (bool) $d->reupload_allowed,
                 'verified_at' => $d->verified_at?->toIso8601String(),
             ])->values()->all(),
             'document_checklist' => $documentChecklist,
@@ -319,13 +349,15 @@ class ProfessionalProfileService
      */
     public function syncProposedServices(ProfessionalProfile $profile, array $serviceIds): void
     {
-        if (! $profile->profession_id) {
+        $profession = $this->resolveProfessionModel($profile);
+
+        if (! $profession) {
             throw ValidationException::withMessages([
                 'services' => ['Une profession valide doit être sélectionnée avant d\'ajouter des prestations.'],
             ]);
         }
 
-        $profession = Profession::with('services')->findOrFail($profile->profession_id);
+        $profession->loadMissing('services');
         $allowedIds = $profession->services->pluck('id')->all();
 
         $intServiceIds = array_values(array_map('intval', $serviceIds));
@@ -366,6 +398,12 @@ class ProfessionalProfileService
         $existing = $profile->documents()->where('profession_document_id', $professionDocumentId)->first();
 
         if ($existing) {
+            if ($existing->isRejected() && ! $existing->reupload_allowed) {
+                throw ValidationException::withMessages([
+                    'file' => ['Ce document a été rejeté. Le re-téléversement doit être autorisé par l\'administration.'],
+                ]);
+            }
+
             // Delete old file if present
             if ($existing->file_path && Storage::disk('public')->exists($existing->file_path)) {
                 Storage::disk('public')->delete($existing->file_path);
@@ -378,6 +416,7 @@ class ProfessionalProfileService
                 'file_size' => $file->getSize(),
                 'status' => DocumentVerificationStatus::Pending,
                 'rejection_reason' => null,
+                'reupload_allowed' => false,
                 'verified_at' => null,
                 'verified_by' => null,
             ]);
@@ -411,33 +450,24 @@ class ProfessionalProfileService
      */
     public function submitDossier(ProfessionalProfile $profile): array
     {
-        $profile->loadMissing(['profession.documents', 'services', 'documents']);
+        $profession = $this->resolveProfessionModel($profile);
+        $profile->loadMissing(['user', 'profession.documents', 'profession.services', 'services', 'documents']);
 
-        if (! $profile->profession_id && $profile->profession) {
-            $slug = $profile->profession instanceof HealthcareProfession
-                ? $profile->profession->value
-                : (string) $profile->profession;
-            $profModel = Profession::where('slug', $slug)->first();
-            if ($profModel) {
-                $profile->profession_id = $profModel->id;
-                $profile->save();
-                $profile->load('profession.documents');
-            }
-        }
+        $profEnum = HealthcareProfession::fromInput($profile->user?->profession ?? $profession?->slug);
 
         $errors = [];
 
-        if (! $profile->profession_id && ! $profile->profession) {
+        if (! $profession && ! $profEnum) {
             $errors['profession'] = ['Veuillez choisir une profession valide avant de soumettre votre dossier.'];
         }
 
-        if ($profile->services->isEmpty()) {
+        if ($profession && $profession->services->isNotEmpty() && $profile->services->isEmpty()) {
             $errors['services'] = ['Vous devez sélectionner au moins une prestation autorisée pour votre profession.'];
         }
 
         // Validate mandatory documents
-        if ($profile->profession) {
-            $mandatoryDocs = $profile->profession->documents()->wherePivot('required', true)->get();
+        if ($profession) {
+            $mandatoryDocs = $profession->documents()->wherePivot('required', true)->get();
             $uploadedDocs = $profile->documents->keyBy('profession_document_id');
 
             $missingMandatory = [];
@@ -493,6 +523,7 @@ class ProfessionalProfileService
         string $decision,
         ?string $reason,
         User $admin,
+        bool $allowReupload = false,
     ): ProfessionalDocument {
         if (! $document->status->isPending()) {
             throw ValidationException::withMessages([
@@ -508,6 +539,7 @@ class ProfessionalProfileService
             $document->update([
                 'status' => DocumentVerificationStatus::Validated,
                 'rejection_reason' => null,
+                'reupload_allowed' => false,
                 'verified_at' => now(),
                 'verified_by' => $admin->id,
             ]);
@@ -534,6 +566,7 @@ class ProfessionalProfileService
             $document->update([
                 'status' => DocumentVerificationStatus::Rejected,
                 'rejection_reason' => $reason,
+                'reupload_allowed' => $allowReupload,
                 'verified_at' => now(),
                 'verified_by' => $admin->id,
             ]);
@@ -546,6 +579,7 @@ class ProfessionalProfileService
                     'document_name' => $docName,
                     'document_status_before' => $documentStatusBefore,
                     'document_status_after' => DocumentVerificationStatus::Rejected->value,
+                    'reupload_allowed' => $allowReupload,
                 ],
                 $admin
             );
@@ -554,6 +588,54 @@ class ProfessionalProfileService
                 'decision' => ["La décision doit être 'validate' ou 'reject'."],
             ]);
         }
+
+        return $document->fresh();
+    }
+
+    /**
+     * Admin: Allow re-uploading a rejected required document.
+     */
+    public function adminAllowDocumentReupload(
+        ProfessionalDocument $document,
+        User $admin,
+    ): ProfessionalDocument {
+        if (! $document->isRejected()) {
+            throw ValidationException::withMessages([
+                'document' => ['Seul un document rejeté peut être autorisé au re-téléversement.'],
+            ]);
+        }
+
+        $profile = $document->professionalProfile;
+        $profession = $this->resolveProfessionModel($profile);
+        $isRequired = $profession
+            ? $profession->documents()
+                ->where('profession_documents.id', $document->profession_document_id)
+                ->wherePivot('required', true)
+                ->exists()
+            : true;
+
+        if (! $isRequired) {
+            throw ValidationException::withMessages([
+                'document' => ['Cette action concerne uniquement les documents obligatoires rejetés.'],
+            ]);
+        }
+
+        $docName = $document->professionDocument?->name ?? 'Document';
+
+        $document->update([
+            'reupload_allowed' => true,
+        ]);
+
+        $profile->recordHistory(
+            ProfessionalHistoryAction::DocumentReplaced,
+            "Re-téléversement autorisé par l'administration pour le document '{$docName}'.",
+            [
+                'document_id' => $document->id,
+                'document_name' => $docName,
+                'reupload_allowed' => true,
+            ],
+            $admin
+        );
 
         return $document->fresh();
     }
@@ -569,39 +651,43 @@ class ProfessionalProfileService
         ?string $reason,
         User $admin,
     ): array {
-        $profile->loadMissing(['profession.documents', 'services', 'documents']);
+        $profession = $this->resolveProfessionModel($profile);
+        $profile->loadMissing(['user', 'profession.documents', 'profession.services', 'services', 'documents']);
+        $profEnum = HealthcareProfession::fromInput($profile->user?->profession ?? $profession?->slug);
 
         if ($decision === 'validate') {
             // Cannot validate if any mandatory document is missing, pending, or rejected!
-            if (! $profile->profession) {
+            if (! $profession && ! $profEnum) {
                 throw ValidationException::withMessages([
                     'dossier' => ['Impossible de valider un dossier sans profession associée.'],
                 ]);
             }
 
-            $mandatoryDocs = $profile->profession->documents()->wherePivot('required', true)->get();
-            $uploadedDocs = $profile->documents->keyBy('profession_document_id');
+            if ($profession) {
+                $mandatoryDocs = $profession->documents()->wherePivot('required', true)->get();
+                $uploadedDocs = $profile->documents->keyBy('profession_document_id');
 
-            $unvalidatedMandatory = [];
-            foreach ($mandatoryDocs as $mDoc) {
-                $uploaded = $uploadedDocs->get($mDoc->id);
-                if (! $uploaded || ! $uploaded->isValidated()) {
-                    $unvalidatedMandatory[] = $mDoc->name;
+                $unvalidatedMandatory = [];
+                foreach ($mandatoryDocs as $mDoc) {
+                    $uploaded = $uploadedDocs->get($mDoc->id);
+                    if (! $uploaded || ! $uploaded->isValidated()) {
+                        $unvalidatedMandatory[] = $mDoc->name;
+                    }
                 }
-            }
 
-            if (! empty($unvalidatedMandatory)) {
-                throw ValidationException::withMessages([
-                    'dossier' => [
-                        'Le dossier ne peut pas être approuvé tant que des documents obligatoires sont manquants, rejetés ou en attente de vérification : '.implode(', ', $unvalidatedMandatory),
-                    ],
-                ]);
-            }
+                if (! empty($unvalidatedMandatory)) {
+                    throw ValidationException::withMessages([
+                        'dossier' => [
+                            'Le dossier ne peut pas être approuvé tant que des documents obligatoires sont manquants, rejetés ou en attente de vérification : '.implode(', ', $unvalidatedMandatory),
+                        ],
+                    ]);
+                }
 
-            if ($profile->services->isEmpty()) {
-                throw ValidationException::withMessages([
-                    'dossier' => ['Le professionnel doit avoir au moins une prestation attribuée.'],
-                ]);
+                if ($profession->services->isNotEmpty() && $profile->services->isEmpty()) {
+                    throw ValidationException::withMessages([
+                        'dossier' => ['Le professionnel doit avoir au moins une prestation attribuée.'],
+                    ]);
+                }
             }
 
             $prevStatus = $profile->status->value;
@@ -765,13 +851,15 @@ class ProfessionalProfileService
         array $serviceIds,
         User $admin,
     ): array {
-        if (! $profile->profession_id) {
+        $profession = $this->resolveProfessionModel($profile);
+
+        if (! $profession) {
             throw ValidationException::withMessages([
                 'services' => ['Le professionnel doit avoir une profession valide pour lui attribuer des prestations.'],
             ]);
         }
 
-        $profession = Profession::with('services')->findOrFail($profile->profession_id);
+        $profession->loadMissing('services');
         $allowedIds = $profession->services->pluck('id')->all();
 
         $intServiceIds = array_values(array_map('intval', $serviceIds));
@@ -801,6 +889,7 @@ class ProfessionalProfileService
             'success' => true,
             'message' => 'Prestations mises à jour avec succès par l\'administration.',
             'services' => $profile->services()->get(),
+            'profile' => $this->getDossier($profile->fresh()),
         ];
     }
 

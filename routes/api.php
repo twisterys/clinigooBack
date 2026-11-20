@@ -82,6 +82,7 @@ Route::group([
     Route::get('/', [AdminProfessionalController::class, 'index']);
     Route::get('{id}', [AdminProfessionalController::class, 'show']);
     Route::post('{id}/documents/{documentId}/verify', [AdminProfessionalController::class, 'verifyDocument']);
+    Route::post('{id}/documents/{documentId}/allow-reupload', [AdminProfessionalController::class, 'allowDocumentReupload']);
     Route::post('{id}/verify', [AdminProfessionalController::class, 'verifyDossier']);
     Route::post('{id}/review-changes', [AdminProfessionalController::class, 'reviewSensitiveChanges']);
     Route::put('{id}/services', [AdminProfessionalController::class, 'updateServices']);
@@ -131,6 +132,7 @@ Route::group([
     Route::post('professions', [AdminProfessionController::class, 'store']);
     Route::get('professions/{profession}', [AdminProfessionController::class, 'show']);
     Route::put('professions/{profession}', [AdminProfessionController::class, 'update']);
+    Route::put('professions/{profession}/documents', [AdminProfessionController::class, 'updateDocuments']);
     Route::delete('professions/{profession}', [AdminProfessionController::class, 'destroy']);
 
     // Cities (Villes)

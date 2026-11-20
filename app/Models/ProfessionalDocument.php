@@ -45,6 +45,7 @@ class ProfessionalDocument extends Model
         'file_size',
         'status',
         'rejection_reason',
+        'reupload_allowed',
         'verified_at',
         'verified_by',
     ];
@@ -65,6 +66,7 @@ class ProfessionalDocument extends Model
     {
         return [
             'status' => DocumentVerificationStatus::class,
+            'reupload_allowed' => 'boolean',
             'verified_at' => 'datetime',
             'file_size' => 'integer',
         ];
