@@ -25,7 +25,8 @@ class AuthController extends Controller
 
         if (! $token = Auth::guard('admin')->attempt($credentials)) {
             return response()->json([
-                'error' => 'Identifiants administrateur invalides ou accès non autorisé.',
+                'message' => 'Identifiants incorrects. Veuillez vérifier votre adresse email et votre mot de passe.',
+                'error' => 'Identifiants incorrects. Veuillez vérifier votre adresse email et votre mot de passe.',
             ], 401);
         }
 

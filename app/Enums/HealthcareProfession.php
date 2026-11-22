@@ -48,7 +48,7 @@ enum HealthcareProfession: string
     {
         return match ($this) {
             self::MedecinGeneraliste => 'solar:stethoscope-bold-duotone',
-            self::Pediatre => 'solar:baby-bold-duotone',
+            self::Pediatre => 'ph:baby-duotone',
             self::SageFemme => 'solar:heart-bold-duotone',
             self::Kinesitherapeute => 'solar:walking-bold-duotone',
             self::Infirmiere => 'solar:syringe-bold-duotone',
