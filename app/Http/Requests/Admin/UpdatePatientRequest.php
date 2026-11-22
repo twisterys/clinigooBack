@@ -3,8 +3,10 @@
 namespace App\Http\Requests\Admin;
 
 use App\Models\User;
+use App\Services\IdentityUniquenessService;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\Validator;
 
 class UpdatePatientRequest extends FormRequest
 {
@@ -57,5 +59,34 @@ class UpdatePatientRequest extends FormRequest
             'medical_notes' => ['nullable', 'string'],
             'conditions' => ['nullable'],
         ];
+    }
+
+    /**
+     * Configure the validator instance.
+     *
+     * @param  Validator  $validator
+     */
+    public function withValidator($validator): void
+    {
+        $validator->after(function ($validator) {
+            $patientParam = $this->route('patient') ?? $this->route('id');
+            $rawId = is_object($patientParam) ? $patientParam->id : $patientParam;
+            $user = User::patients()->find($rawId)
+                ?? User::patients()->whereHas('patientProfile', fn ($q) => $q->where('id', $rawId))->first();
+            $ignoreUserId = $user?->id ?? (is_numeric($rawId) ? (int) $rawId : null);
+
+            if (! empty($this->input('email')) && IdentityUniquenessService::isEmailTaken($this->input('email'), $ignoreUserId)) {
+                $validator->errors()->add('email', 'Cette adresse email est déjà associée à un compte.');
+            }
+            if (! empty($this->input('profile_email')) && IdentityUniquenessService::isEmailTaken($this->input('profile_email'), $ignoreUserId)) {
+                $validator->errors()->add('profile_email', 'Cette adresse email est déjà associée à un compte.');
+            }
+            if (! empty($this->input('phone')) && IdentityUniquenessService::isPhoneTaken($this->input('phone'), $ignoreUserId)) {
+                $validator->errors()->add('phone', 'Ce numéro de téléphone est déjà associé à un compte.');
+            }
+            if (! empty($this->input('cin_amo_cnss')) && IdentityUniquenessService::isCinTaken($this->input('cin_amo_cnss'), $ignoreUserId)) {
+                $validator->errors()->add('cin_amo_cnss', 'Ce numéro de CIN est déjà associé à un compte.');
+            }
+        });
     }
 }

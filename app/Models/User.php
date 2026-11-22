@@ -38,7 +38,7 @@ use Tymon\JWTAuth\Contracts\JWTSubject;
  * @property-read PatientProfile|ProfessionalProfile|null $profile
  */
 #[Fillable(['name', 'email', 'password', 'type', 'profession'])]
-#[Hidden(['password', 'two_factor_secret', 'two_factor_recovery_codes', 'remember_token'])]
+#[Hidden(['password', 'two_factor_secret', 'two_factor_recovery_codes', 'remember_token', 'email_verification_code', 'email_verification_code_expires_at'])]
 class User extends Authenticatable implements JWTSubject, MustVerifyEmail
 {
     /** @use HasFactory<UserFactory> */
@@ -60,9 +60,25 @@ class User extends Authenticatable implements JWTSubject, MustVerifyEmail
             'type' => UserType::class,
             'profession' => HealthcareProfession::class,
             'email_verified_at' => 'datetime',
+            'email_verification_code_expires_at' => 'datetime',
             'password' => 'hashed',
             'two_factor_confirmed_at' => 'datetime',
         ];
+    }
+
+    /**
+     * Generate and persist a 6-digit email verification OTP valid for 15 minutes.
+     */
+    public function generateEmailVerificationCode(int $ttlMinutes = 15): string
+    {
+        $code = str_pad((string) random_int(0, 999999), 6, '0', STR_PAD_LEFT);
+
+        $this->forceFill([
+            'email_verification_code' => $code,
+            'email_verification_code_expires_at' => now()->addMinutes($ttlMinutes),
+        ])->save();
+
+        return $code;
     }
 
     /**

@@ -5,14 +5,19 @@ namespace App\Http\Controllers\Api;
 use App\Enums\HealthcareProfession;
 use App\Enums\UserType;
 use App\Http\Controllers\Controller;
+use App\Mail\ProfessionalRegisteredMail;
 use App\Models\PatientProfile;
 use App\Models\Profession;
 use App\Models\ProfessionalProfile;
 use App\Models\User;
+use App\Services\IdentityUniquenessService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\URL;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 
@@ -47,11 +52,32 @@ class AuthController extends Controller
             // Professional Profile fields
             'id_number' => ['nullable', 'string'],
             'ID' => ['nullable', 'string'],
+            'cin' => ['nullable', 'string'],
             'professional_id' => ['nullable', 'string'],
             'profession_id' => ['nullable'],
             'services' => ['nullable', 'array'],
             'services.*' => ['integer', 'exists:services,id'],
         ]);
+
+        // Enforce global uniqueness of email, phone, and CIN across all patients and professionals
+        $uniquenessErrors = [];
+        if (IdentityUniquenessService::isEmailTaken($validated['email'])) {
+            $uniquenessErrors['email'] = ['Cette adresse email est déjà associée à un compte.'];
+        }
+        if (! empty($validated['profile_email']) && IdentityUniquenessService::isEmailTaken($validated['profile_email'])) {
+            $uniquenessErrors['profile_email'] = ['Cette adresse email est déjà associée à un compte.'];
+        }
+        if (! empty($validated['phone']) && IdentityUniquenessService::isPhoneTaken($validated['phone'])) {
+            $uniquenessErrors['phone'] = ['Ce numéro de téléphone est déjà associé à un compte.'];
+        }
+        $rawCin = $validated['id_number'] ?? $validated['ID'] ?? $validated['cin'] ?? $validated['professional_id'] ?? null;
+        if (! empty($rawCin) && IdentityUniquenessService::isCinTaken($rawCin)) {
+            $uniquenessErrors['id_number'] = ['Ce numéro de CIN est déjà associé à un compte.'];
+            $uniquenessErrors['cin'] = ['Ce numéro de CIN est déjà associé à un compte.'];
+        }
+        if (! empty($uniquenessErrors)) {
+            throw ValidationException::withMessages($uniquenessErrors);
+        }
 
         $firstName = $validated['firstName'] ?? $validated['first_name'] ?? '';
         $lastName = $validated['lastName'] ?? $validated['last_name'] ?? '';
@@ -115,6 +141,22 @@ class AuthController extends Controller
             if (isset($validated['services']) && is_array($validated['services'])) {
                 $proProfile->services()->sync($validated['services']);
             }
+
+            $proProfile->loadMissing('profession');
+            $otpCode = $user->generateEmailVerificationCode(15);
+            $verificationUrl = ProfessionalRegisteredMail::buildVerificationUrl($user, 15);
+
+            try {
+                Mail::to($user->email)->queue(
+                    new ProfessionalRegisteredMail($user, $proProfile, $otpCode, $verificationUrl)
+                );
+            } catch (\Throwable $e) {
+                Log::warning('Failed to queue professional verification email', [
+                    'user_id' => $user->id,
+                    'email' => $user->email,
+                    'error' => $e->getMessage(),
+                ]);
+            }
         }
 
         $token = Auth::guard('api')->login($user);
@@ -139,6 +181,35 @@ class AuthController extends Controller
             ], 401);
         }
 
+        /** @var User|null $user */
+        $user = Auth::guard('api')->user();
+        if ($user && $user->isProfessional() && ! $user->hasVerifiedEmail()) {
+            Auth::guard('api')->logout();
+
+            $profile = $user->professionalProfile()->with('profession')->first();
+            $otpCode = $user->generateEmailVerificationCode(15);
+            $verificationUrl = ProfessionalRegisteredMail::buildVerificationUrl($user, 15);
+
+            try {
+                Mail::to($user->email)->queue(
+                    new ProfessionalRegisteredMail($user, $profile, $otpCode, $verificationUrl)
+                );
+            } catch (\Throwable $e) {
+                Log::warning('Failed to queue professional verification email on login', [
+                    'user_id' => $user->id,
+                    'email' => $user->email,
+                    'error' => $e->getMessage(),
+                ]);
+            }
+
+            return response()->json([
+                'message' => 'Votre adresse email n\'est pas encore vérifiée. Un nouveau code de vérification vient de vous être envoyé.',
+                'code' => 'EMAIL_NOT_VERIFIED',
+                'email_verified' => false,
+                'email' => $user->email,
+            ], 403);
+        }
+
         return $this->respondWithToken((string) $token);
     }
 
@@ -152,6 +223,7 @@ class AuthController extends Controller
 
         if ($user) {
             $user->loadMissing(['patientProfile', 'professionalProfile.profession', 'professionalProfile.services']);
+            $user->setAttribute('email_verified', (bool) $user->hasVerifiedEmail());
         }
 
         return response()->json($user);
@@ -220,6 +292,17 @@ class AuthController extends Controller
                 'email' => ['nullable', 'email', 'max:255'],
             ]);
 
+            $uniquenessErrors = [];
+            if (! empty($validated['phone']) && IdentityUniquenessService::isPhoneTaken($validated['phone'], $user->id)) {
+                $uniquenessErrors['phone'] = ['Ce numéro de téléphone est déjà associé à un compte.'];
+            }
+            if (! empty($validated['email']) && IdentityUniquenessService::isEmailTaken($validated['email'], $user->id)) {
+                $uniquenessErrors['email'] = ['Cette adresse email est déjà associée à un compte.'];
+            }
+            if (! empty($uniquenessErrors)) {
+                throw ValidationException::withMessages($uniquenessErrors);
+            }
+
             $firstName = $validated['first_name'] ?? $validated['firstName'] ?? null;
             $lastName = $validated['last_name'] ?? $validated['lastName'] ?? null;
 
@@ -263,6 +346,17 @@ class AuthController extends Controller
             $firstName = $validated['first_name'] ?? $validated['firstName'] ?? null;
             $lastName = $validated['last_name'] ?? $validated['lastName'] ?? null;
             $idNumber = $validated['id_number'] ?? $validated['ID'] ?? $validated['professional_id'] ?? null;
+
+            $uniquenessErrors = [];
+            if (! empty($validated['phone']) && IdentityUniquenessService::isPhoneTaken($validated['phone'], $user->id)) {
+                $uniquenessErrors['phone'] = ['Ce numéro de téléphone est déjà associé à un compte.'];
+            }
+            if (! empty($idNumber) && IdentityUniquenessService::isCinTaken($idNumber, $user->id)) {
+                $uniquenessErrors['id_number'] = ['Ce numéro de CIN est déjà associé à un compte.'];
+            }
+            if (! empty($uniquenessErrors)) {
+                throw ValidationException::withMessages($uniquenessErrors);
+            }
 
             $profileData = array_filter([
                 'first_name' => $firstName,

@@ -8,18 +8,24 @@ use App\Enums\ProfessionalHistoryAction;
 use App\Enums\ProfessionalStatus;
 use App\Enums\UserType;
 use App\Http\Controllers\Controller;
+use App\Mail\ProfessionalRegisteredMail;
 use App\Models\Profession;
 use App\Models\ProfessionalDocument;
 use App\Models\ProfessionalProfile;
 use App\Models\User;
+use App\Services\IdentityUniquenessService;
 use App\Services\ProfessionalProfileService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\URL;
 use Illuminate\Support\Str;
+use Illuminate\View\View;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
 class ProfessionalController extends Controller
@@ -107,17 +113,16 @@ class ProfessionalController extends Controller
         }
         if (empty($cin)) {
             $errors['personal.cin'] = ['Le numéro de CIN est obligatoire.'];
-        } else {
-            // Check CIN uniqueness
-            $cinExists = ProfessionalProfile::where('id_number', $cin)->exists();
-            if ($cinExists) {
-                $errors['personal.cin'] = ['Ce numéro de CIN est déjà associé à un compte professionnel.'];
-                $errors['cin'] = ['Ce numéro de CIN est déjà associé à un compte professionnel.'];
-            }
+        } elseif (IdentityUniquenessService::isCinTaken($cin)) {
+            $errors['personal.cin'] = ['Ce numéro de CIN est déjà associé à un compte.'];
+            $errors['cin'] = ['Ce numéro de CIN est déjà associé à un compte.'];
         }
 
         if (empty($phone)) {
             $errors['personal.phone'] = ['Le numéro de téléphone est obligatoire.'];
+        } elseif (IdentityUniquenessService::isPhoneTaken($phone)) {
+            $errors['personal.phone'] = ['Ce numéro de téléphone est déjà associé à un compte.'];
+            $errors['phone'] = ['Ce numéro de téléphone est déjà associé à un compte.'];
         }
 
         if (empty($city)) {
@@ -133,13 +138,9 @@ class ProfessionalController extends Controller
             $errors['personal.email'] = ['L\'adresse email est obligatoire.'];
         } elseif (! filter_var($email, FILTER_VALIDATE_EMAIL)) {
             $errors['personal.email'] = ['L\'adresse email est invalide.'];
-        } else {
-            // Check Email uniqueness
-            $emailExists = User::where('email', $email)->exists();
-            if ($emailExists) {
-                $errors['personal.email'] = ['Cette adresse email est déjà associée à un compte.'];
-                $errors['email'] = ['Cette adresse email est déjà associée à un compte.'];
-            }
+        } elseif (IdentityUniquenessService::isEmailTaken($email)) {
+            $errors['personal.email'] = ['Cette adresse email est déjà associée à un compte.'];
+            $errors['email'] = ['Cette adresse email est déjà associée à un compte.'];
         }
 
         if (empty($password)) {
@@ -217,10 +218,13 @@ class ProfessionalController extends Controller
 
         $profile->load(['profession', 'services', 'documents.professionDocument']);
 
+        $this->sendVerificationEmail($user, $profile);
+
         return response()->json([
             'id' => $profile->id,
             'status' => $profile->status->value,
             'status_label' => $profile->status->label(),
+            'email_verified' => (bool) $user->hasVerifiedEmail(),
             'first_name' => $profile->first_name,
             'last_name' => $profile->last_name,
             'full_name' => $profile->full_name,
@@ -264,20 +268,27 @@ class ProfessionalController extends Controller
     {
         $email = trim((string) ($request->input('email') ?? ''));
         $cin = strtoupper(trim((string) ($request->input('cin') ?? '')));
+        $phone = trim((string) ($request->input('phone') ?? ''));
 
         $errors = [];
 
         if (! empty($email)) {
             if (! filter_var($email, FILTER_VALIDATE_EMAIL)) {
                 $errors['email'] = 'Format d\'email invalide.';
-            } elseif (User::where('email', $email)->exists()) {
+            } elseif (IdentityUniquenessService::isEmailTaken($email)) {
                 $errors['email'] = 'Cette adresse email est déjà associée à un compte.';
             }
         }
 
         if (! empty($cin)) {
-            if (ProfessionalProfile::where('id_number', $cin)->exists()) {
-                $errors['cin'] = 'Ce numéro de CIN est déjà associé à un compte professionnel.';
+            if (IdentityUniquenessService::isCinTaken($cin)) {
+                $errors['cin'] = 'Ce numéro de CIN est déjà associé à un compte.';
+            }
+        }
+
+        if (! empty($phone)) {
+            if (IdentityUniquenessService::isPhoneTaken($phone)) {
+                $errors['phone'] = 'Ce numéro de téléphone est déjà associé à un compte.';
             }
         }
 
@@ -371,6 +382,13 @@ class ProfessionalController extends Controller
             'is_available' => ['nullable', 'boolean'],
         ]);
 
+        if (! empty($validated['phone']) && IdentityUniquenessService::isPhoneTaken($validated['phone'], $profile->user_id)) {
+            return response()->json([
+                'message' => 'Ce numéro de téléphone est déjà associé à un compte.',
+                'errors' => ['phone' => ['Ce numéro de téléphone est déjà associé à un compte.']],
+            ], 422);
+        }
+
         $updated = $this->profileService->updateNonSensitiveProfile($profile, $validated);
 
         return response()->json([
@@ -398,6 +416,14 @@ class ProfessionalController extends Controller
             'services' => ['nullable', 'array'],
             'services.*' => ['integer', 'exists:services,id'],
         ]);
+
+        $cinInput = $validated['id_number'] ?? $validated['ID'] ?? null;
+        if (! empty($cinInput) && IdentityUniquenessService::isCinTaken($cinInput, $profile->user_id)) {
+            return response()->json([
+                'message' => 'Ce numéro de CIN est déjà associé à un compte.',
+                'errors' => ['id_number' => ['Ce numéro de CIN est déjà associé à un compte.']],
+            ], 422);
+        }
 
         $result = $this->profileService->updateSensitiveProfile($profile, $validated);
 
@@ -488,6 +514,205 @@ class ProfessionalController extends Controller
 
         return response()->file($path, [
             'Content-Disposition' => 'inline; filename="'.$document->original_name.'"',
+        ]);
+    }
+
+    /**
+     * Generate an OTP + signed verification URL and send the verification email.
+     */
+    protected function sendVerificationEmail(User $user, ?ProfessionalProfile $profile): void
+    {
+        $otpCode = $user->generateEmailVerificationCode(15);
+        $verificationUrl = ProfessionalRegisteredMail::buildVerificationUrl($user, 15);
+
+        try {
+            Mail::to($user->email)->queue(
+                new ProfessionalRegisteredMail($user, $profile, $otpCode, $verificationUrl)
+            );
+        } catch (\Throwable $e) {
+            Log::warning('Failed to queue professional verification email', [
+                'user_id' => $user->id,
+                'email' => $user->email,
+                'error' => $e->getMessage(),
+            ]);
+        }
+    }
+
+    /**
+     * Verify a professional's email address using the 6-digit OTP code.
+     */
+    public function verifyEmailCode(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'email' => ['nullable', 'email'],
+            'code' => ['required', 'digits:6'],
+        ]);
+
+        /** @var User|null $user */
+        $user = Auth::guard('api')->user();
+        if (! $user && ! empty($validated['email'])) {
+            $user = User::where('email', $validated['email'])->first();
+        }
+
+        if (! $user) {
+            return response()->json([
+                'message' => 'Compte introuvable.',
+            ], 404);
+        }
+
+        if ($user->hasVerifiedEmail()) {
+            return response()->json([
+                'message' => 'Votre adresse email est déjà vérifiée.',
+                'email_verified' => true,
+            ]);
+        }
+
+        if (
+            empty($user->email_verification_code) ||
+            ! hash_equals((string) $user->email_verification_code, (string) $validated['code'])
+        ) {
+            return response()->json([
+                'message' => 'Code de vérification invalide.',
+            ], 422);
+        }
+
+        if (
+            ! $user->email_verification_code_expires_at ||
+            $user->email_verification_code_expires_at->isPast()
+        ) {
+            return response()->json([
+                'message' => 'Ce code de vérification a expiré. Veuillez en demander un nouveau.',
+            ], 422);
+        }
+
+        $user->forceFill([
+            'email_verified_at' => now(),
+            'email_verification_code' => null,
+            'email_verification_code_expires_at' => null,
+        ])->save();
+
+        return response()->json([
+            'message' => 'Adresse email vérifiée avec succès.',
+            'email_verified' => true,
+        ]);
+    }
+
+    /**
+     * Verify a professional's email address via signed URL clicked in the email.
+     */
+    public function verifyEmailLink(Request $request, int $id, string $hash): JsonResponse|View
+    {
+        /** @var User|null $user */
+        $user = User::find($id);
+        $loginUrl = rtrim((string) env('FRONTEND_URL', 'http://localhost:3000'), '/').'/login';
+
+        $hasValidSignature = $request->hasValidRelativeSignature() || $request->hasValidSignature();
+
+        if (! $user || ! $hasValidSignature || ! hash_equals(sha1($user->email), $hash)) {
+            $errorMsg = 'Ce lien de vérification est invalide ou a expiré. Veuillez demander un nouveau code.';
+            if ($request->wantsJson()) {
+                return response()->json(['message' => $errorMsg, 'email_verified' => false], 403);
+            }
+
+            return view('emails.email-verified', [
+                'verified' => false,
+                'message' => $errorMsg,
+                'loginUrl' => $loginUrl,
+            ]);
+        }
+
+        if (! $user->hasVerifiedEmail()) {
+            $user->forceFill([
+                'email_verified_at' => now(),
+                'email_verification_code' => null,
+                'email_verification_code_expires_at' => null,
+            ])->save();
+        }
+
+        $successMsg = 'Votre adresse email a bien été vérifiée. Vous pouvez maintenant accéder à votre espace professionnel Clinigoo.';
+
+        if ($request->wantsJson()) {
+            return response()->json([
+                'message' => $successMsg,
+                'email_verified' => true,
+            ]);
+        }
+
+        return view('emails.email-verified', [
+            'verified' => true,
+            'message' => $successMsg,
+            'loginUrl' => $loginUrl,
+        ]);
+    }
+
+    /**
+     * Resend a fresh 6-digit OTP and verification link to the professional.
+     */
+    public function resendVerificationEmail(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'email' => ['nullable', 'email'],
+        ]);
+
+        /** @var User|null $user */
+        $user = Auth::guard('api')->user();
+        if (! $user && ! empty($validated['email'])) {
+            $user = User::where('email', $validated['email'])->first();
+        }
+
+        if (! $user) {
+            return response()->json([
+                'message' => 'Compte introuvable.',
+            ], 404);
+        }
+
+        if ($user->hasVerifiedEmail()) {
+            return response()->json([
+                'message' => 'Votre adresse email est déjà vérifiée.',
+                'email_verified' => true,
+            ]);
+        }
+
+        $profile = $user->professionalProfile()->with('profession')->first();
+        if (! $profile) {
+            $profile = new ProfessionalProfile([
+                'first_name' => $user->name,
+                'last_name' => '',
+            ]);
+        }
+
+        $this->sendVerificationEmail($user, $profile);
+
+        return response()->json([
+            'message' => 'Un nouveau code et lien de vérification ont été envoyés à votre adresse email.',
+        ]);
+    }
+
+    /**
+     * Check whether a professional's email address has been verified.
+     */
+    public function verificationStatus(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'email' => ['nullable', 'email'],
+        ]);
+
+        /** @var User|null $user */
+        $user = Auth::guard('api')->user();
+        if (! $user && ! empty($validated['email'])) {
+            $user = User::whereRaw('LOWER(TRIM(email)) = ?', [strtolower(trim($validated['email']))])->first();
+        }
+
+        if (! $user) {
+            return response()->json([
+                'message' => 'Compte introuvable.',
+                'email_verified' => false,
+            ], 404);
+        }
+
+        return response()->json([
+            'email' => $user->email,
+            'email_verified' => (bool) $user->hasVerifiedEmail(),
         ]);
     }
 }

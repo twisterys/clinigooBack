@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests\Admin;
 
+use App\Services\IdentityUniquenessService;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Validator;
 
@@ -54,6 +55,18 @@ class StorePatientRequest extends FormRequest
         $validator->after(function ($validator) {
             if (empty($this->input('first_name')) && empty($this->input('firstName')) && empty($this->input('name'))) {
                 $validator->errors()->add('name', 'The name or first_name field is required.');
+            }
+            if (! empty($this->input('email')) && IdentityUniquenessService::isEmailTaken($this->input('email'))) {
+                $validator->errors()->add('email', 'Cette adresse email est déjà associée à un compte.');
+            }
+            if (! empty($this->input('profile_email')) && IdentityUniquenessService::isEmailTaken($this->input('profile_email'))) {
+                $validator->errors()->add('profile_email', 'Cette adresse email est déjà associée à un compte.');
+            }
+            if (! empty($this->input('phone')) && IdentityUniquenessService::isPhoneTaken($this->input('phone'))) {
+                $validator->errors()->add('phone', 'Ce numéro de téléphone est déjà associé à un compte.');
+            }
+            if (! empty($this->input('cin_amo_cnss')) && IdentityUniquenessService::isCinTaken($this->input('cin_amo_cnss'))) {
+                $validator->errors()->add('cin_amo_cnss', 'Ce numéro de CIN est déjà associé à un compte.');
             }
         });
     }

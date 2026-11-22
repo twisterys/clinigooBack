@@ -54,6 +54,11 @@ Route::post('public/professionals', [ProfessionalController::class, 'publicRegis
 Route::get('public/professionals/{id}', [ProfessionalController::class, 'publicShow']);
 Route::post('professionals', [ProfessionalController::class, 'publicRegister']);
 Route::get('professionals/{id}', [ProfessionalController::class, 'publicShow']);
+Route::post('professional/verify-email', [ProfessionalController::class, 'verifyEmailCode']);
+Route::post('professional/resend-verification', [ProfessionalController::class, 'resendVerificationEmail']);
+Route::post('professional/verification-status', [ProfessionalController::class, 'verificationStatus']);
+Route::get('professional/verify-email/{id}/{hash}', [ProfessionalController::class, 'verifyEmailLink'])
+    ->name('api.professional.verify-email.link');
 
 // Cities (Villes)
 Route::get('public/cities', [CityController::class, 'index']);
